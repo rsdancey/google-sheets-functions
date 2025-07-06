@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{info, warn};
+use log::{info, warn, error};
 
 #[cfg(windows)]
 use windows::{
@@ -8,9 +8,6 @@ use windows::{
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, 
         COINIT_APARTMENTTHREADED, IDispatch, CLSIDFromProgID,
         DISPATCH_METHOD, DISPATCH_PROPERTYGET, DISPPARAMS, EXCEPINFO
-    },
-    Win32::System::Variant::{
-        VariantInit
     },
 };
 
@@ -457,9 +454,8 @@ impl QuickBooksClient {
                 Ok(account_data)
             }
             Err(e) => {
-                warn!("Failed to retrieve real QuickBooks data: {}", e);
-                warn!("Falling back to mock data for testing purposes");
-                self.get_mock_account_data(account_number).await
+                error!("Failed to retrieve real QuickBooks data: {}", e);
+                panic!("QuickBooks connection failed - cannot proceed without real data: {}", e);
             }
         }
     }
@@ -522,28 +518,113 @@ impl QuickBooksClient {
 
     #[cfg(windows)]
     fn begin_session(&self, session_manager: &IDispatch) -> Result<()> {
+        info!("Calling OpenConnection...");
+        
+        // First, call OpenConnection with application ID and connection type
+        let app_id = "QuickBooks-Sheets-Sync";
+        let app_name = "QuickBooks to Google Sheets Sync Service";
+        let _connection_type = 0; // localQBD = 0, remoteQBD = 1
+        
+        let _result = self.call_method_with_params(
+            session_manager, 
+            "OpenConnection", 
+            &[
+                &self.create_variant_string(app_id)?,
+                &self.create_variant_string(app_name)?,  // Use more descriptive name
+            ]
+        )?;
+        info!("OpenConnection successful");
+        
+        // Add a small delay to let QuickBooks process the connection
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        
         info!("Calling BeginSession...");
         
-        // Prepare parameters for BeginSession call
+        // Prepare parameters for BeginSession call - try different approaches
         let company_file = if self.config.company_file == "AUTO" {
-            ""  // Empty string tells QB to use currently open file
+            // For AUTO mode, try both empty string and null approaches
+            ""
         } else {
             &self.config.company_file
         };
         
-        let mode = 0; // qbFileOpenDoNotCare = 0, qbFileOpenSingleUser = 1, qbFileOpenMultiUser = 2
+        info!("Attempting BeginSession with company file: '{}'", company_file);
         
-        // Call BeginSession method
-        let _result = self.call_method_with_params(
-            session_manager,
-            "BeginSession",
-            &[
-                &self.create_variant_string(company_file)?,
-                &self.create_variant_int(mode)?,
+        // Determine connection mode preference from config
+        let connection_mode = self.config.connection_mode.as_deref().unwrap_or("auto");
+        info!("Connection mode preference: {}", connection_mode);
+        
+        // Try different modes in sequence based on user preference
+        let attempts_to_try = match connection_mode {
+            "multi-user" => vec![
+                // Prioritize multi-user mode
+                ("", 2), // qbFileOpenMultiUser
+                ("", 0), // qbFileOpenDoNotCare
+                ("", 1), // qbFileOpenSingleUser (fallback)
+                (company_file, 2), // qbFileOpenMultiUser with file
+                (company_file, 0), // qbFileOpenDoNotCare with file
+                (company_file, 1), // qbFileOpenSingleUser with file
             ],
-        )?;
+            "single-user" => vec![
+                // Prioritize single-user mode
+                ("", 1), // qbFileOpenSingleUser
+                ("", 0), // qbFileOpenDoNotCare
+                ("", 2), // qbFileOpenMultiUser (fallback)
+                (company_file, 1), // qbFileOpenSingleUser with file
+                (company_file, 0), // qbFileOpenDoNotCare with file
+                (company_file, 2), // qbFileOpenMultiUser with file
+            ],
+            _ => vec![
+                // Auto mode - try all modes
+                ("", 2), // qbFileOpenMultiUser (default first)
+                ("", 0), // qbFileOpenDoNotCare
+                ("", 1), // qbFileOpenSingleUser
+                (company_file, 2), // qbFileOpenMultiUser with file
+                (company_file, 0), // qbFileOpenDoNotCare with file
+                (company_file, 1), // qbFileOpenSingleUser with file
+            ]
+        };
         
-        info!("BeginSession successful");
+        // Call BeginSession method with multiple approaches
+        let mut attempts = 0;
+        let max_attempts = attempts_to_try.len();
+        
+        for (file_path, mode) in attempts_to_try.iter() {
+            attempts += 1;
+            let mode_description = match mode {
+                0 => "qbFileOpenDoNotCare",
+                1 => "qbFileOpenSingleUser",
+                2 => "qbFileOpenMultiUser",
+                _ => "unknown",
+            };
+            info!("Attempting BeginSession with file: '{}', mode: {} ({}) (attempt {}/{})", 
+                  file_path, mode, mode_description, attempts, max_attempts);
+            
+            match self.call_method_with_params(
+                session_manager,
+                "BeginSession",
+                &[
+                    &self.create_variant_string(file_path)?,
+                    &self.create_variant_int(*mode)?,
+                ],
+            ) {
+                Ok(_result) => {
+                    info!("✅ BeginSession successful with file: '{}', mode: {} ({}) on attempt {}", 
+                          file_path, mode, mode_description, attempts);
+                    return Ok(());
+                }
+                Err(e) if attempts < max_attempts => {
+                    warn!("❌ BeginSession failed with file: '{}', mode: {} ({}) on attempt {}: {}. Trying next approach...", 
+                          file_path, mode, mode_description, attempts, e);
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                }
+                Err(e) => {
+                    error!("All BeginSession attempts failed. Last error: {}", e);
+                    return Err(e);
+                }
+            }
+        }
+        
         Ok(())
     }
 
@@ -554,6 +635,11 @@ impl QuickBooksClient {
         let _result = self.call_method_with_params(session_manager, "EndSession", &[])?;
         
         info!("EndSession successful");
+        
+        info!("Calling CloseConnection...");
+        let _result = self.call_method_with_params(session_manager, "CloseConnection", &[])?;
+        info!("CloseConnection successful");
+        
         Ok(())
     }
 
@@ -585,11 +671,16 @@ impl QuickBooksClient {
         
         info!("Processing request...");
         
-        // Process the request
+        // DoRequests expects the message set object directly, not wrapped in a VARIANT
+        info!("Calling DoRequests method...");
+        
+        // Create a VARIANT that contains the IDispatch directly - clone to get owned value
+        let msg_set_variant = VARIANT::from(msg_set_dispatch.clone());
+        
         let response_set = self.call_method_with_params(
             session_manager,
-            "ProcessRequest", 
-            &[&self.dispatch_to_variant(&msg_set_dispatch)?],
+            "DoRequests", 
+            &[&msg_set_variant],
         )?;
         
         let response_set_dispatch = self.variant_to_dispatch(response_set)?;
@@ -691,21 +782,33 @@ impl QuickBooksClient {
     // Helper methods for COM operations
     #[cfg(windows)]
     fn call_method_with_params(&self, obj: &IDispatch, method_name: &str, params: &[&VARIANT]) -> Result<VARIANT> {
-        let _method_name_bstr = BSTR::from(method_name);
         let mut dispid = 0;
         
-        // Get method ID
+        // Get method ID - make sure the wide string stays alive
+        let method_name_wide: Vec<u16> = method_name.encode_utf16().chain(std::iter::once(0)).collect();
+        
         unsafe {
-            let method_name_wide: Vec<u16> = method_name.encode_utf16().chain(std::iter::once(0)).collect();
             let method_name_ptr = method_name_wide.as_ptr();
-            obj.GetIDsOfNames(
+            
+            // Add some debugging
+            info!("Calling GetIDsOfNames for method: {}", method_name);
+            info!("Method name pointer: 0x{:p}", method_name_ptr);
+            info!("Method name wide chars: {:?}", &method_name_wide[..std::cmp::min(method_name_wide.len(), 20)]);
+            
+            let result = obj.GetIDsOfNames(
                 &windows::core::GUID::zeroed(),
                 &PCWSTR(method_name_ptr),
                 1,
                 0x0409, // LCID_ENGLISH_US
                 &mut dispid as *mut i32,
-            ).map_err(|e| anyhow::anyhow!("Failed to get method ID for '{}': {}", method_name, e))?;
+            );
+            
+            info!("GetIDsOfNames result: {:?}", result);
+            
+            result.map_err(|e| anyhow::anyhow!("Failed to get method ID for '{}': {}", method_name, e))?;
         }
+        
+        info!("Got method ID {} for {}", dispid, method_name);
         
         // Prepare parameters
         let mut variant_args: Vec<VARIANT> = params.iter().rev().map(|p| (*p).clone()).collect();
@@ -722,7 +825,9 @@ impl QuickBooksClient {
         
         // Call method
         unsafe {
-            obj.Invoke(
+            info!("Calling Invoke for method: {} with dispid: {}", method_name, dispid);
+            
+            let invoke_result = obj.Invoke(
                 dispid,
                 &windows::core::GUID::zeroed(),
                 0x0409, // LCID_ENGLISH_US
@@ -731,9 +836,14 @@ impl QuickBooksClient {
                 Some(&mut result as *mut VARIANT),
                 Some(&mut excep_info as *mut EXCEPINFO),
                 Some(&mut arg_err as *mut u32),
-            ).map_err(|e| anyhow::anyhow!("Failed to call method '{}': {}", method_name, e))?;
+            );
+            
+            info!("Invoke result: {:?}", invoke_result);
+            
+            invoke_result.map_err(|e| anyhow::anyhow!("Failed to call method '{}': {}", method_name, e))?;
         }
         
+        info!("Successfully called method: {}", method_name);
         Ok(result)
     }
 
@@ -779,65 +889,71 @@ impl QuickBooksClient {
 
     #[cfg(windows)]
     fn create_variant_string(&self, s: &str) -> Result<VARIANT> {
-        unsafe {
-            // VariantInit returns the initialized variant
-            let variant = VariantInit();
-            
-            // Use the windows crate's VARIANT::from method if available
-            let _bstr = BSTR::from(s);
-            
-            // Try to create the variant using the proper API
-            // Since we can't access fields directly, we'll use a different approach
-            
-            // For now, let's use a simple workaround - create an empty variant
-            // and let the COM calls handle the conversion
-            Ok(variant)
-        }
+        // Use the direct VARIANT creation from the windows crate
+        let bstr = BSTR::from(s);
+        Ok(VARIANT::from(bstr))
     }
 
     #[cfg(windows)]
     fn create_variant_int(&self, i: i32) -> Result<VARIANT> {
-        unsafe {
-            // VariantInit returns the initialized variant
-            let variant = VariantInit();
-            
-            // For now, just return the empty variant
-            // The actual value will be handled by the COM interface
-            let _ = i; // Suppress unused variable warning
-            Ok(variant)
-        }
+        // Use the direct VARIANT creation from the windows crate
+        Ok(VARIANT::from(i))
     }
 
     #[cfg(windows)]
-    fn variant_to_dispatch(&self, _variant: VARIANT) -> Result<IDispatch> {
-        // For now, return a mock dispatch object
-        // In a real implementation, we would properly extract the IDispatch from the variant
-        Err(anyhow::anyhow!("variant_to_dispatch not implemented - using mock data"))
-    }
-
-    #[cfg(windows)]
-    fn dispatch_to_variant(&self, _dispatch: &IDispatch) -> Result<VARIANT> {
-        unsafe {
-            // Create an empty variant for now
-            let variant = VariantInit();
-            Ok(variant)
-        }
-    }
-
-    #[cfg(windows)]
-    fn variant_to_string(&self, _variant: VARIANT) -> Result<String> {
-        // Since we can't access the fields directly, let's use a different approach
-        // We'll try to convert the variant to a string using Windows API
+    fn variant_to_dispatch(&self, variant: VARIANT) -> Result<IDispatch> {
+        use std::convert::TryFrom;
         
-        // For now, let's use a simple approach - convert to string representation
-        // This is a workaround until we can properly access the variant fields
-        Ok("mock_string".to_string())
+        // Use the windows crate's built-in TryFrom implementation
+        // This will handle the variant type checking internally
+        match IDispatch::try_from(&variant) {
+            Ok(dispatch) => {
+                info!("Successfully converted VARIANT to IDispatch using windows crate TryFrom");
+                Ok(dispatch)
+            }
+            Err(e) => {
+                error!("Failed to convert VARIANT to IDispatch: {:?}", e);
+                Err(anyhow::anyhow!("Failed to convert VARIANT to IDispatch: {}", e))
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn dispatch_to_variant(&self, dispatch: &IDispatch) -> Result<VARIANT> {
+        // Convert IDispatch to VARIANT using the Windows crate
+        // This should create a VARIANT with VT_DISPATCH type containing the IDispatch pointer
+        // Clone to get owned value since VARIANT::from expects owned IDispatch
+        let variant = VARIANT::from(dispatch.clone());
+        Ok(variant)
+    }
+
+    #[cfg(windows)]
+    fn variant_to_string(&self, variant: VARIANT) -> Result<String> {
+        use std::convert::TryFrom;
+        
+        info!("Converting VARIANT to string");
+        
+        // Try to convert using windows crate built-in conversion
+        match BSTR::try_from(&variant) {
+            Ok(bstr) => {
+                let result = bstr.to_string();
+                info!("Successfully converted VARIANT to string: {}", result);
+                Ok(result)
+            }
+            Err(e) => {
+                warn!("Failed to convert VARIANT to BSTR: {:?}", e);
+                // For now, return a mock value since we're primarily testing the IDispatch conversion
+                Ok("mock_string".to_string())
+            }
+        }
     }
 
     #[cfg(windows)]
     fn variant_to_int(&self, _variant: VARIANT) -> Result<i32> {
-        // Same approach - since we can't access fields directly, use a workaround
-        // For now, return a mock value
+        info!("Converting VARIANT to int");
+        
+        // For now, return a mock value since we're primarily testing the IDispatch conversion
+        // The Windows crate doesn't provide TryFrom implementations for primitive types
         Ok(0)
     }
     

@@ -1,0 +1,11 @@
+F:\google-sheets-tools\quickbooks-rust-service\target\debug\deps\env_logger-b54ddac9b0d035ae.d: F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\lib.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\logger.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\mod.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\humantime.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\mod.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\buffer.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\target.rs
+
+F:\google-sheets-tools\quickbooks-rust-service\target\debug\deps\libenv_logger-b54ddac9b0d035ae.rmeta: F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\lib.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\logger.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\mod.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\humantime.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\mod.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\buffer.rs F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\target.rs
+
+F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\lib.rs:
+F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\logger.rs:
+F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\mod.rs:
+F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\humantime.rs:
+F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\mod.rs:
+F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\buffer.rs:
+F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\env_logger-0.11.8\src\fmt\writer\target.rs:

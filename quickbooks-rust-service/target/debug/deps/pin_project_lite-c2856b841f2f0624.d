@@ -1,0 +1,7 @@
+F:\google-sheets-tools\quickbooks-rust-service\target\debug\deps\pin_project_lite-c2856b841f2f0624.d: F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\pin-project-lite-0.2.16\src\lib.rs
+
+F:\google-sheets-tools\quickbooks-rust-service\target\debug\deps\libpin_project_lite-c2856b841f2f0624.rlib: F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\pin-project-lite-0.2.16\src\lib.rs
+
+F:\google-sheets-tools\quickbooks-rust-service\target\debug\deps\libpin_project_lite-c2856b841f2f0624.rmeta: F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\pin-project-lite-0.2.16\src\lib.rs
+
+F:\Rust\cargo\registry\src\index.crates.io-1949cf8c6b5b557f\pin-project-lite-0.2.16\src\lib.rs:

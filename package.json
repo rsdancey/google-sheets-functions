@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@google/clasp": "^2.4.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.8.3"
   },
   "author": "rsdancey",
   "license": "MIT"

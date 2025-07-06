@@ -1,53 +1,56 @@
 # QuickBooks to Google Sheets Sync Configuration
 
 [quickbooks]
-# Enable QuickBooks integration (set to false for testing with mock data)
-enabled = true
-
-# QuickBooks company file path
-# "AUTO" = use currently open company file
-# "MOCK" = force mock data for testing
-# Or specify full path: "C:\\QuickBooks\\Company.qbw"
-company_file = "MOCK"
-
-# Application name as registered with QuickBooks
-application_name = "QB Sheets Sync"
-
-# Target account number to sync
+# How to connect to QuickBooks company file:
+# Options:
+#   1. Specific file path: "C:\\Users\\YourUser\\Documents\\QuickBooks\\Your Company.qbw"
+#   2. Use currently open file: "AUTO"
+#   3. Empty string: Will prompt to select from available files
+#   4. Mock data for testing: "MOCK"
+company_file = "AUTO"
+# Account number to sync
 account_number = "9445"
-
-# Display name for the account
+# Account name for logging/identification
 account_name = "INCOME TAX"
 
-# Server-specific settings (for Windows Server 2019)
-[server]
-# Run as Windows Service (requires windows-service dependency)
-run_as_service = false
+# Connection mode preference (optional)
+# Options:
+#   "multi-user" - Prioritize multi-user mode (recommended for production)
+#   "single-user" - Prioritize single-user mode
+#   "auto" - Try all modes automatically (default)
+connection_mode = "multi-user"
 
-# Connection timeout in milliseconds (longer for server environments)
-connection_timeout = 30000
+# QuickBooks Authentication (optional)
+# Most users can leave these empty - see AUTHENTICATION.md for details
 
-# Number of retry attempts for QuickBooks connection
-retry_attempts = 3
+# Company file password (if your .qbw file is password-protected)
+# Can also use environment variable: QB_FILE_PASSWORD
+company_file_password = ""
 
-# Log to Windows Event Log (for server monitoring)
-log_to_event_log = false
+# QuickBooks user credentials (for multi-user files only)
+# Can also use environment variables: QB_USERNAME and QB_USER_PASSWORD
+qb_username = ""
+qb_password = ""
 
-# Health check port for monitoring (0 = disabled)
-health_check_port = 0
+# Connection timeout in seconds
+connection_timeout = 30
 
 [google_sheets]
-# Google Sheets API configuration
-spreadsheet_id = "your-spreadsheet-id"
-sheet_name = "QuickBooks Data"
+# Google Apps Script Web App URL
+webapp_url = "https://script.google.com/macros/s/AKfycbz1yVgVctgWOfyLAr95vXjXYSXjFtGl6OVqU_ljKUgPJakGoZ5tWnSvlc9XLq6tTddp1w/exec"
+# API key for authentication
+api_key = "30999370-950f-4a87-b2fb-54670dffdf5f"
+# SPREADSHEET ID (the document itself)
+spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
+# SHEET NAME (the tab within the document)
+sheet_name = "The Simple Buckets"
+# CELL ADDRESS (where to write the balance)
+cell_address = "D5"
 
-# Sync schedule (cron format)
-# Default: every 15 minutes
-sync_schedule = "0 */15 * * * *"
 
-[logging]
-# Log level: error, warn, info, debug, trace
-level = "info"
-
-# Log format: compact, pretty, json
-format = "compact"
+[schedule]
+# Cron expression for sync schedule
+# "0 0 * * * *" = every hour at minute 0
+# "0 */30 * * * *" = every 30 minutes
+# "0 0 */6 * * *" = every 6 hours
+cron_expression = "0 0 * * * *"
