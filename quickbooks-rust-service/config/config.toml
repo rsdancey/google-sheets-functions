@@ -1,0 +1,53 @@
+# QuickBooks to Google Sheets Sync Configuration
+
+[quickbooks]
+# Enable QuickBooks integration (set to false for testing with mock data)
+enabled = true
+
+# QuickBooks company file path
+# "AUTO" = use currently open company file
+# "MOCK" = force mock data for testing
+# Or specify full path: "C:\\QuickBooks\\Company.qbw"
+company_file = "MOCK"
+
+# Application name as registered with QuickBooks
+application_name = "QB Sheets Sync"
+
+# Target account number to sync
+account_number = "9445"
+
+# Display name for the account
+account_name = "INCOME TAX"
+
+# Server-specific settings (for Windows Server 2019)
+[server]
+# Run as Windows Service (requires windows-service dependency)
+run_as_service = false
+
+# Connection timeout in milliseconds (longer for server environments)
+connection_timeout = 30000
+
+# Number of retry attempts for QuickBooks connection
+retry_attempts = 3
+
+# Log to Windows Event Log (for server monitoring)
+log_to_event_log = false
+
+# Health check port for monitoring (0 = disabled)
+health_check_port = 0
+
+[google_sheets]
+# Google Sheets API configuration
+spreadsheet_id = "your-spreadsheet-id"
+sheet_name = "QuickBooks Data"
+
+# Sync schedule (cron format)
+# Default: every 15 minutes
+sync_schedule = "0 */15 * * * *"
+
+[logging]
+# Log level: error, warn, info, debug, trace
+level = "info"
+
+# Log format: compact, pretty, json
+format = "compact"

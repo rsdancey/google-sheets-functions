@@ -1,0 +1,8 @@
+/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/release/deps/libmime-1d11ba2b56e5f910.rmeta: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17/src/lib.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17/src/parse.rs
+
+/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/release/deps/libmime-1d11ba2b56e5f910.rlib: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17/src/lib.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17/src/parse.rs
+
+/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/release/deps/mime-1d11ba2b56e5f910.d: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17/src/lib.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17/src/parse.rs
+
+/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17/src/lib.rs:
+/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/mime-0.3.17/src/parse.rs:

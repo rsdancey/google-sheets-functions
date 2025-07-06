@@ -1,0 +1,19 @@
+# Test Configuration with Windows Paths
+# This demonstrates Windows file path handling with single backslashes
+# The app will automatically escape these before TOML parsing
+
+[quickbooks]
+# Windows path with single backslashes - the app will convert this automatically
+company_file = "C:\Users\Ryan\Documents\QuickBooks\My Company.qbw"
+account_number = "9445"
+account_name = "INCOME TAX"
+
+[google_sheets]
+webapp_url = "https://script.google.com/macros/s/test/exec"
+api_key = "test_key"
+spreadsheet_id = "test_spreadsheet_id"
+sheet_name = "Sheet1"
+cell_address = "A1"
+
+[schedule]
+cron_expression = "0 0 * * * *"

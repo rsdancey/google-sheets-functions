@@ -1,0 +1,17 @@
+# Test configuration for Windows path normalization
+# This file contains deliberately problematic Windows paths to test normalization
+
+[quickbooks]
+company_file = "C:\Users\TestUser\Documents\QuickBooks\Company File.qbw"
+account_number = "9445"
+account_name = "TEST ACCOUNT"
+
+[google_sheets]
+webapp_url = "https://script.google.com/macros/s/test/exec"
+api_key = "test_key"
+spreadsheet_id = "test_spreadsheet_id"
+sheet_name = "Test Sheet"
+cell_address = "A1"
+
+[schedule]
+cron_expression = "0 0 * * * *"
