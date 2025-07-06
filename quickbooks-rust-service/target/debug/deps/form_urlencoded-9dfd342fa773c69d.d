@@ -1,7 +1,0 @@
-/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/debug/deps/libform_urlencoded-9dfd342fa773c69d.rmeta: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/form_urlencoded-1.2.1/src/lib.rs
-
-/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/debug/deps/libform_urlencoded-9dfd342fa773c69d.rlib: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/form_urlencoded-1.2.1/src/lib.rs
-
-/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/debug/deps/form_urlencoded-9dfd342fa773c69d.d: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/form_urlencoded-1.2.1/src/lib.rs
-
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/form_urlencoded-1.2.1/src/lib.rs:

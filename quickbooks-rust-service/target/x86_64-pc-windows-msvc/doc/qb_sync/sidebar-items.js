@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["main","sync_account_data","test_quickbooks_connection","test_sheets_connection"],"mod":["config","quickbooks","sheets"],"struct":["AccountData"]};

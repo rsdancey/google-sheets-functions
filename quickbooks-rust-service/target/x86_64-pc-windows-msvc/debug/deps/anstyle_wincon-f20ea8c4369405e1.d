@@ -1,8 +1,0 @@
-/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/x86_64-pc-windows-msvc/debug/deps/libanstyle_wincon-f20ea8c4369405e1.rmeta: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/lib.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/ansi.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/stream.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/windows.rs
-
-/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/x86_64-pc-windows-msvc/debug/deps/anstyle_wincon-f20ea8c4369405e1.d: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/lib.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/ansi.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/stream.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/windows.rs
-
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/lib.rs:
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/ansi.rs:
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/stream.rs:
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/anstyle-wincon-3.0.9/src/windows.rs:

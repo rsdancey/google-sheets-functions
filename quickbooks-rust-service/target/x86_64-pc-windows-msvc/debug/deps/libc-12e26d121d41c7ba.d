@@ -1,9 +1,0 @@
-/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/x86_64-pc-windows-msvc/debug/deps/liblibc-12e26d121d41c7ba.rmeta: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/lib.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/macros.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/primitives.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/windows/mod.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/windows/msvc/mod.rs
-
-/Users/ryandancey/SoftwareProjects/JSCode/google-sheets-functions/quickbooks-rust-service/target/x86_64-pc-windows-msvc/debug/deps/libc-12e26d121d41c7ba.d: /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/lib.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/macros.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/primitives.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/windows/mod.rs /Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/windows/msvc/mod.rs
-
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/lib.rs:
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/macros.rs:
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/primitives.rs:
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/windows/mod.rs:
-/Users/ryandancey/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/libc-0.2.174/src/windows/msvc/mod.rs:
