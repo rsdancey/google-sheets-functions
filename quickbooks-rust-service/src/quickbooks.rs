@@ -322,32 +322,34 @@ impl QuickBooksClient {
             match self.get_property(session_manager, "Company") {
                 Ok(company) => {
                     info!("Got company object");
-                    let company_dispatch = self.variant_to_dispatch(&company)?;
-                    match self.get_property(&company_dispatch, "FileName") {
-                        Ok(current_file) => {
-                            match self.variant_to_string(&current_file) {
-                                Ok(file_path) => {
-                                    info!("Found currently open company file: {}", file_path);
-                                    file_path
-                                }
-                                Err(e) => {
-                                    info!("Failed to convert company file path to string: {}", e);
-                                    return Err(anyhow::anyhow!("Failed to get current company file path: {}", e));
+                    if let Some(company_dispatch) = company.try_as_dispatch()? {
+                        match self.get_property(company_dispatch, "FileName") {
+                            Ok(current_file) => {
+                                match self.variant_to_string(&current_file) {
+                                    Ok(file_path) => {
+                                        info!("Found currently open company file: {}", file_path);
+                                        file_path
+                                    }
+                                    Err(e) => {
+                                        info!("Failed to convert company file path to string: {}", e);
+                                        return Err(anyhow::anyhow!("Failed to get current company file path: {}", e));
+                                    }
                                 }
                             }
+                            Err(e) => {
+                                info!("Failed to get company file name: {}", e);
+                                return Err(anyhow::anyhow!("Failed to get company file name: {}", e));
+                            }
                         }
-                        Err(e) => {
-                            info!("Failed to get company file name: {}", e);
-                            return Err(anyhow::anyhow!("Failed to get company file name: {}", e));
-                        }
+                    } else {
+                        info!("Failed to convert company object to IDispatch");
+                        return Err(anyhow::anyhow!("Failed to convert company object to IDispatch"));
                     }
                 }
                 Err(e) => {
                     info!("Failed to get Company object: {}", e);
                     return Err(anyhow::anyhow!("Failed to get Company object: {}", e));
-                }
-            }
-        } else {
+            } else {
             company_file.to_string()
         };
 
