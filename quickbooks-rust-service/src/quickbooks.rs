@@ -318,25 +318,35 @@ impl QuickBooksClient {
     fn begin_session(&self, session_manager: &IDispatch, company_file: &str) -> Result<String> {
         // First try to get current company file if no file specified
         let effective_company_file = if company_file.is_empty() {
-            match self.get_property(session_manager, "CurrentCompanyFileName") {
-                Ok(current_file) => {
-                    match self.variant_to_string(&current_file) {
-                        Ok(file_path) => {
-                            info!("Found currently open company file: {}", file_path);
-                            file_path
+            // First check connection type
+            match self.get_property(session_manager, "ConnectionType") {
+                Ok(conn_type) => {
+                    info!("Current connection type: {:?}", conn_type);
+                    match self.get_property(session_manager, "CurrentCompanyFileName") {
+                        Ok(current_file) => {
+                            match self.variant_to_string(&current_file) {
+                                Ok(file_path) => {
+                                    info!("Found currently open company file: {}", file_path);
+                                    file_path
+                                }
+                                Err(e) => {
+                                    info!("Failed to convert company file path to string: {}", e);
+                                    return Err(anyhow::anyhow!("Failed to get current company file path: {}", e));
+                                }
+                            }
                         }
                         Err(e) => {
-                            info!("Failed to convert company file path to string: {}", e);
-                            return Err(anyhow::anyhow!("Failed to get current company file path: {}", e));
+                            info!("Failed to get company file name: {}", e);
+                            return Err(anyhow::anyhow!("Failed to get company file name: {}", e));
                         }
                     }
                 }
                 Err(e) => {
-                    info!("No company file currently open: {}", e);
-                    return Err(anyhow::anyhow!("No company file open. Please specify a company file path or open QuickBooks with a company file first."));
+                    info!("Failed to get connection type: {}", e);
+                    return Err(anyhow::anyhow!("Failed to get connection type: {}", e));
                 }
-            }
-        } else {
+                }
+            } else {
             company_file.to_string()
         };
 
