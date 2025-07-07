@@ -292,6 +292,7 @@ impl QuickBooksClient {
         
         // Use OpenConnection2 with 3 parameters: app_id, app_name, and connection_type=1 (localQBD)
         info!("💡 If this is your first time, QuickBooks will show an authorization dialog");
+        info!("Attempting to open connection with localQBD mode");
         match self.invoke_method(
             session_manager,
             "OpenConnection2",
@@ -315,9 +316,25 @@ impl QuickBooksClient {
 
     #[cfg(windows)]
     fn begin_session(&self, session_manager: &IDispatch, company_file: &str) -> Result<String> {
-        info!("Starting BeginSession with company file: '{}'", company_file);
+        // First try to get current company file if no file specified
+        let effective_company_file = if company_file.is_empty() {
+            match self.get_current_company_file_name(session_manager, "") {
+                Ok(current_file) => {
+                    info!("Found currently open company file: {}", current_file);
+                    current_file
+                }
+                Err(e) => {
+                    info!("No company file currently open: {}", e);
+                    return Err(anyhow::anyhow!("No company file open. Please specify a company file path or open QuickBooks with a company file first."));
+                }
+            }
+        } else {
+            company_file.to_string()
+        };
+
+        info!("Starting BeginSession with company file: '{}'", effective_company_file);
         
-        let company_file_variant = self.create_string_variant(company_file)?;
+        let company_file_variant = self.create_string_variant(&effective_company_file)?;
         
         // Try different file open modes for multi-user QuickBooks
         let file_open_modes = [
