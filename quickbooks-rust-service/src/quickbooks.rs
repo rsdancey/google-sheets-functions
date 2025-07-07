@@ -176,13 +176,13 @@ impl QuickBooksClient {
         
         info!("Attempting to register application with QuickBooks...");
         
-        // Application details for registration. Use empty AppID for first connection.
-        let app_id = "";
+        // Application details for registration
+        let app_id = "QuickBooks-Sheets-Sync-v1";
         let app_name = "QuickBooks Sheets Sync";
         
         info!("About to call perform_complete_session_test...");
         
-        // Follow the C++ SDK pattern: OpenConnection -> BeginSession -> EndSession -> CloseConnection
+        // Follow the C++ SDK pattern: OpenConnection2 -> BeginSession -> EndSession -> CloseConnection
         match self.perform_complete_session_test(&session_manager, app_id, app_name) {
             Ok(()) => {
                 info!("✅ Successfully registered with QuickBooks!");
@@ -288,13 +288,14 @@ impl QuickBooksClient {
         
         let app_id_variant = self.create_string_variant(app_id)?;
         let app_name_variant = self.create_string_variant(app_name)?;
+        let conn_type_variant = self.create_int_variant(1)?; // 1 = localQBD mode
         
-        // Following C++ SDK exactly: OpenConnection2 with 2 parameters
+        // Use OpenConnection2 with 3 parameters: app_id, app_name, and connection_type=1 (localQBD)
         info!("💡 If this is your first time, QuickBooks will show an authorization dialog");
         match self.invoke_method(
             session_manager,
             "OpenConnection2",
-            &[&app_id_variant, &app_name_variant]
+            &[&app_id_variant, &app_name_variant, &conn_type_variant]
         ) {
             Ok(_) => {
                 info!("✅ Successfully opened connection to QuickBooks");
@@ -425,56 +426,6 @@ impl QuickBooksClient {
         
         self.invoke_method(session_manager, "OpenConnection", &[&app_id_variant])
             .map(|_| ())
-    }
-
-    #[cfg(windows)]
-    fn call_open_connection2_basic(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
-        info!("Trying OpenConnection2 (2 parameters)...");
-        info!("  AppID: '{}'", app_id);
-        info!("  AppName: '{}'", app_name);
-        
-        let app_id_variant = self.create_string_variant(app_id)?;
-        let app_name_variant = self.create_string_variant(app_name)?;
-        
-        info!("  About to call invoke_method with OpenConnection2...");
-        
-        match self.invoke_method(session_manager, "OpenConnection2", &[&app_id_variant, &app_name_variant]) {
-            Ok(_) => {
-                info!("  ✅ OpenConnection2 successful!");
-                Ok(())
-            }
-            Err(e) => {
-                error!("  ❌ OpenConnection2 failed: {}", e);
-                Err(e)
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    fn call_open_connection2_with_type(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
-        info!("Trying OpenConnection2 (3 parameters with connection types)...");
-        
-        let app_id_variant = self.create_string_variant(app_id)?;
-        let app_name_variant = self.create_string_variant(app_name)?;
-        
-        // Try different connection type values that are commonly used for local QuickBooks Desktop
-        let connection_types = [1, 0]; // 1 = localQBD (most common), 0 = default
-        
-        for &conn_type in &connection_types {
-            info!("  Trying connection type: {}", conn_type);
-            let conn_type_variant = self.create_int_variant(conn_type)?;
-            
-            if let Ok(_) = self.invoke_method(
-                session_manager, 
-                "OpenConnection2", 
-                &[&app_id_variant, &app_name_variant, &conn_type_variant]
-            ) {
-                info!("  ✅ Success with connection type: {}", conn_type);
-                return Ok(());
-            }
-        }
-        
-        Err(anyhow::anyhow!("OpenConnection2 failed with all connection types"))
     }
 
     #[cfg(windows)]
