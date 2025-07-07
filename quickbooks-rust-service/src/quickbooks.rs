@@ -58,19 +58,16 @@ impl QuickBooksClient {
         // Initialize COM
         unsafe {
             let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            match hr {
-                Ok(_) => info!("COM initialized successfully"),
-                Err(e) => {
-                    let code = e.code().0;
-                    // RPC_E_CHANGED_MODE = 0x80010106
-                    // S_FALSE = 0x00000001 (already initialized with same mode)
-                    if code == 0x80010106 || code == 0x00000001 {
-                        info!("COM already initialized in compatible mode");
-                    } else {
-                        error!("Failed to initialize COM: {:?}", e);
-                        return Err(anyhow::anyhow!("COM initialization failed: {:?}", e));
-                    }
-                }
+            let code = hr.0;
+            if code == 0 { // S_OK
+                info!("COM initialized successfully");
+            } else if code == 1 { // S_FALSE - already initialized with same mode
+                info!("COM already initialized in compatible mode");
+            } else if code == 0x80010106 { // RPC_E_CHANGED_MODE
+                info!("COM already initialized in different mode");
+            } else {
+                error!("Failed to initialize COM: HRESULT 0x{:08x}", code);
+                return Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code));
             }
         }
 
@@ -102,19 +99,16 @@ impl QuickBooksClient {
         
         unsafe {
             let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            match hr {
-                Ok(_) => info!("COM initialized successfully"),
-                Err(e) => {
-                    let code = e.code().0;
-                    // RPC_E_CHANGED_MODE = 0x80010106
-                    // S_FALSE = 0x00000001 (already initialized with same mode)
-                    if code == 0x80010106 || code == 0x00000001 {
-                        info!("COM already initialized in compatible mode");
-                    } else {
-                        error!("Failed to initialize COM: {:?}", e);
-                        return Err(anyhow::anyhow!("COM initialization failed: {:?}", e));
-                    }
-                }
+            let code = hr.0;
+            if code == 0 { // S_OK
+                info!("COM initialized successfully");
+            } else if code == 1 { // S_FALSE - already initialized with same mode
+                info!("COM already initialized in compatible mode");
+            } else if code == 0x80010106 { // RPC_E_CHANGED_MODE
+                info!("COM already initialized in different mode");
+            } else {
+                error!("Failed to initialize COM: HRESULT 0x{:08x}", code);
+                return Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code));
             }
         }
 
