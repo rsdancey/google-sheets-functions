@@ -622,11 +622,7 @@ impl QuickBooksClient {
 
     #[cfg(windows)]
     fn create_bool_variant(&self, value: bool) -> Result<VARIANT> {
-        let mut variant = VARIANT::default();
-        unsafe {
-            variant.set_bool(value);
-        }
-        Ok(variant)
+        Ok(VARIANT::from(value as i16))
     }
 
     fn create_int_variant(&self, value: i32) -> Result<VARIANT> {
