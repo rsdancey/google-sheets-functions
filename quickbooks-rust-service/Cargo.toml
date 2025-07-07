@@ -39,6 +39,7 @@ windows = { version = "0.58", features = [
     "Win32_System_Services",           # Added for service detection
     "Win32_Security_Authorization",    # Added for user impersonation  
     "Win32_System_WindowsProgramming", # Added for server utilities
+    "Win32_System_Registry",           # Added for QuickBooks application registration
     "implement",
 ] }
 # Optional: Windows Service support for server deployment

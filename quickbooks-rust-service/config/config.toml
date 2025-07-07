@@ -13,6 +13,14 @@ account_number = "9445"
 # Account name for logging/identification
 account_name = "INCOME TAX"
 
+# Application name registered with QuickBooks (must match exactly)
+# This is the name you used when you first registered your application with QuickBooks
+application_name = "QuickBooks-Sheets-Sync"
+
+# Application ID (GUID) provided by QuickBooks during registration
+# This is the unique identifier for your application
+application_id = "25e0e396-0946-4db8-8326-e8d70534c64a"
+
 # Connection mode preference (optional)
 # Options:
 #   "multi-user" - Prioritize multi-user mode (recommended for production)

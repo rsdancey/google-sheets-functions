@@ -19,6 +19,7 @@ pub struct QuickBooksConfig {
     pub account_name: String,
     pub connection_mode: Option<String>,  // Added connection mode preference
     pub application_name: Option<String>,  // Added application name
+    pub application_id: Option<String>,  // Added application ID (AppID/GUID)
     pub company_file_password: Option<String>,
     pub qb_username: Option<String>,
     pub qb_password: Option<String>,
@@ -168,6 +169,7 @@ impl Default for Config {
                 account_name: "INCOME TAX".to_string(),
                 connection_mode: Some("multi-user".to_string()),
                 application_name: None,
+                application_id: None,
                 company_file_password: None,
                 qb_username: None,
                 qb_password: None,

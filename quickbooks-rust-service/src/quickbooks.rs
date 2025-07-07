@@ -1,13 +1,13 @@
 use anyhow::Result;
-use log::{info, warn, error};
+use log::{info, error};
 
 #[cfg(windows)]
 use windows::{
     core::{HSTRING, VARIANT, BSTR, PCWSTR},
     Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, 
+        CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
         COINIT_APARTMENTTHREADED, IDispatch, CLSIDFromProgID,
-        DISPATCH_METHOD, DISPATCH_PROPERTYGET, DISPPARAMS, EXCEPINFO
+        DISPATCH_METHOD, DISPPARAMS, EXCEPINFO, DISPATCH_FLAGS
     },
 };
 
@@ -25,359 +25,74 @@ impl QuickBooksClient {
         })
     }
 
+    /// Test basic QuickBooks SDK availability
     pub async fn test_connection(&self) -> Result<()> {
-        info!("Testing QuickBooks connection...");
-        
-        // Mock data mode
-        if self.config.company_file == "MOCK" {
-            info!("Mock mode: QuickBooks connection test skipped");
-            info!("Service will use simulated QuickBooks data");
-            return Ok(());
-        }
-        
         #[cfg(windows)]
         {
-            self.test_qb_connection_windows().await
+            self.test_sdk_availability().await
         }
         
         #[cfg(not(windows))]
         {
-            warn!("QuickBooks connection test skipped - not running on Windows");
-            info!("This service is designed to run on Windows with QuickBooks Desktop Enterprise");
-            Ok(())
+            Err(anyhow::anyhow!("QuickBooks Desktop is only supported on Windows"))
         }
     }
 
-    /// Gets the list of currently open company files in QuickBooks
-    pub async fn get_open_company_files(&self) -> Result<Vec<String>> {
-        info!("Getting list of open QuickBooks company files...");
-        
+    /// Attempt to register with QuickBooks and establish a connection
+    pub async fn register_with_quickbooks(&self) -> Result<()> {
         #[cfg(windows)]
         {
-            self.get_open_files_windows().await
+            self.perform_registration().await
         }
         
         #[cfg(not(windows))]
         {
-            Ok(vec!["Mock Company File.qbw".to_string()])
-        }
-    }
-
-    /// Connects to QuickBooks using different strategies
-    pub async fn connect_to_quickbooks(&self) -> Result<()> {
-        info!("Connecting to QuickBooks...");
-        
-        // Strategy 0: Use mock data for testing
-        if self.config.company_file == "MOCK" {
-            info!("Using mock data mode - no actual QuickBooks connection");
-            return Ok(());
-        }
-        
-        // Strategy 1: Use specific company file path if provided
-        if !self.config.company_file.is_empty() && self.config.company_file != "AUTO" {
-            info!("Attempting to connect to specific company file: {}", self.config.company_file);
-            return self.connect_to_specific_file().await;
-        }
-        
-        // Strategy 2: Connect to currently open company file
-        info!("Attempting to connect to currently open company file");
-        self.connect_to_open_file().await
-    }
-
-    async fn connect_to_specific_file(&self) -> Result<()> {
-        info!("Connecting to specific company file: {}", self.config.company_file);
-        
-        // Mock data mode
-        if self.config.company_file == "MOCK" {
-            info!("Mock mode: Simulating company file connection");
-            return Ok(());
-        }
-        
-        // Check if file exists
-        if !std::path::Path::new(&self.config.company_file).exists() {
-            return Err(anyhow::anyhow!(
-                "QuickBooks company file not found: {}. Please check the path in your configuration.",
-                self.config.company_file
-            ));
-        }
-        
-        // Check if authentication is needed
-        if self.config.company_file_password.is_some() {
-            info!("Company file password provided - will use for authentication");
-        }
-        
-        if self.config.qb_username.is_some() {
-            info!("QuickBooks username provided - will use for multi-user authentication");
-        }
-        
-        #[cfg(windows)]
-        {
-            self.open_specific_company_file().await
-        }
-        
-        #[cfg(not(windows))]
-        {
-            info!("Mock: Would open company file: {}", self.config.company_file);
-            Ok(())
-        }
-    }
-
-    async fn connect_to_open_file(&self) -> Result<()> {
-        info!("Connecting to currently open QuickBooks company file");
-        
-        #[cfg(windows)]
-        {
-            self.connect_to_current_session().await
-        }
-        
-        #[cfg(not(windows))]
-        {
-            info!("Mock: Would connect to currently open company file");
-            Ok(())
+            Err(anyhow::anyhow!("QuickBooks Desktop is only supported on Windows"))
         }
     }
 
     #[cfg(windows)]
-    async fn get_open_files_windows(&self) -> Result<Vec<String>> {
-        // In a real implementation, this would:
-        // 1. Connect to QuickBooks application
-        // 2. Query for open company files
-        // 3. Return list of available files
+    async fn test_sdk_availability(&self) -> Result<()> {
+        info!("Testing QuickBooks SDK availability...");
         
-        Ok(vec!["Currently Open Company.qbw".to_string()])
-    }
-
-    #[cfg(windows)]
-    async fn open_specific_company_file(&self) -> Result<()> {
-        info!("Opening specific company file with authentication...");
-        
-        // In a real implementation, this would:
-        // 1. Create QB session manager
-        // 2. Call OpenConnection with specific file path
-        // 3. Handle company file password if provided
-        // 4. Handle QuickBooks user authentication if provided
-        // 5. Handle Windows authentication prompts
-        // 6. Verify successful connection
-        
-        let timeout = self.config.connection_timeout.unwrap_or(30);
-        info!("Connection timeout: {} seconds", timeout);
-        
-        if let Some(ref password) = self.config.company_file_password {
-            if !password.is_empty() {
-                info!("Using company file password for authentication");
-                // Would pass password to OpenConnection
-            }
-        }
-        
-        if let Some(ref username) = self.config.qb_username {
-            if !username.is_empty() {
-                info!("Using QuickBooks username: {}", username);
-                // Would use username/password for QuickBooks user authentication
-                if let Some(ref password) = self.config.qb_password {
-                    if !password.is_empty() {
-                        info!("QuickBooks password provided");
-                        // Would use password for authentication
-                    }
-                }
-            }
-        }
-        
-        info!("Would open company file: {}", self.config.company_file);
-        Ok(())
-    }
-
-    #[cfg(windows)]
-    async fn connect_to_current_session(&self) -> Result<()> {
-        // In a real implementation, this would:
-        // 1. Create QB session manager
-        // 2. Call OpenConnection without specifying file (uses current)
-        // 3. Handle authentication
-        // 4. Verify connection
-        
-        info!("Would connect to currently open company file");
-        Ok(())
-    }
-
-    #[cfg(windows)]
-    async fn test_qb_connection_windows(&self) -> Result<()> {
         unsafe {
-            // Initialize COM with apartment threading
             let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             if hr.is_err() {
-                warn!("COM already initialized or failed to initialize: {:?}", hr);
-                // Don't fail if COM is already initialized
+                // COM may already be initialized, which is fine
             }
+        }
 
-            // Try different QuickBooks SDK versions (starting with newer versions for QB Enterprise v24)
-            let versions = ["QBFC17.QBSessionManager", "QBFC16.QBSessionManager", "QBFC15.QBSessionManager", "QBFC14.QBSessionManager", "QBFC13.QBSessionManager"];
-            let mut last_error = None;
-            let mut success = false;
-            
-            for version in &versions {
-                info!("Trying QuickBooks SDK version: {}", version);
-                
-                // Wrap each attempt in a separate try block to prevent access violations
-                let result = std::panic::catch_unwind(|| {
-                    let prog_id = HSTRING::from(*version);
-                    let clsid_result = CLSIDFromProgID(&prog_id);
-                    
-                    match clsid_result {
-                        Ok(clsid) => {
-                            let qb_app_result: windows::core::Result<IDispatch> = CoCreateInstance(
-                                &clsid,
-                                None,
-                                CLSCTX_INPROC_SERVER,
-                            );
-                            
-                            match qb_app_result {
-                                Ok(_qb_app) => {
-                                    info!("QuickBooks COM object created successfully with version: {}", version);
-                                    Ok(())
-                                }
-                                Err(e) => {
-                                    warn!("QuickBooks session manager creation failed for {}: {}", version, e);
-                                    Err(e)
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Failed to get CLSID for {}: {}", version, e);
-                            Err(e)
-                        }
-                    }
-                });
+        let result = self.create_session_manager();
 
-                match result {
-                    Ok(Ok(())) => {
-                        success = true;
-                        break;
-                    }
-                    Ok(Err(e)) => {
-                        last_error = Some(format!("{}", e));
-                    }
-                    Err(_) => {
-                        last_error = Some(format!("Access violation or panic in {}", version));
-                        warn!("Access violation or panic occurred when testing {}", version);
-                    }
-                }
-            }
-
-            // Always clean up COM
+        unsafe {
             CoUninitialize();
+        }
 
-            if success {
-                Ok(())
-            } else {
-                if let Some(error) = last_error {
-                    warn!("All QuickBooks SDK versions failed. Last error: {}", error);
-                }
-                info!("This is normal if QuickBooks SDK is not installed or QuickBooks is not running");
-                info!("To use mock data for testing, set company_file = \"MOCK\" in your config");
-                
-                // Don't fail the test - just warn
+        match result {
+            Ok(_) => {
+                info!("✅ QuickBooks SDK is available");
                 Ok(())
             }
-        }
-    }
-
-    pub async fn get_account_balance(&self, account_number: &str) -> Result<crate::AccountData> {
-        info!("Getting account balance for account: {}", account_number);
-        
-        // Mock data mode
-        if self.config.company_file == "MOCK" {
-            info!("Mock mode: Returning simulated account data");
-            info!("Note: Account {} is a sub-account of 'BoA Accounts' under account 1000", account_number);
-            info!("Querying account hierarchy: 1000 -> BoA Accounts -> {} ({})", account_number, self.config.account_name);
-            
-            // Simulate different balances based on account number to help with debugging
-            let mock_balance = match account_number {
-                "9445" => {
-                    // Simulate the actual INCOME TAX account with realistic values
-                    let base_balance = -18745.32; // Negative because it's a liability/tax account
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-                    let daily_variation = (timestamp as f64 / 86400.0).sin() * 1500.0;
-                    base_balance + daily_variation
-                }
-                _ => {
-                    // Generic mock for other accounts
-                    15234.78
-                }
-            };
-            
-            info!("Found account {} ({}) with balance: ${:.2}", account_number, self.config.account_name, mock_balance);
-            
-            return Ok(crate::AccountData {
-                account_number: account_number.to_string(),
-                account_name: self.config.account_name.clone(),
-                balance: mock_balance,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            });
-        }
-        
-        // First ensure we're connected to QuickBooks
-        self.connect_to_quickbooks().await?;
-        
-        #[cfg(windows)]
-        {
-            self.get_account_balance_windows(account_number).await
-        }
-        
-        #[cfg(not(windows))]
-        {
-            // For development/testing on non-Windows platforms
-            warn!("Running in development mode - returning mock data");
-            info!("Note: Account {} is a sub-account of 'BoA Accounts' under account 1000", account_number);
-            info!("Querying account hierarchy: 1000 -> BoA Accounts -> {} ({})", account_number, self.config.account_name);
-            
-            // Simulate different balances based on account number to help with debugging
-            let mock_balance = match account_number {
-                "9445" => {
-                    // Simulate the actual INCOME TAX account with realistic values
-                    let base_balance = -18745.32; // Negative because it's a liability/tax account
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-                    let daily_variation = (timestamp as f64 / 86400.0).sin() * 1500.0;
-                    base_balance + daily_variation
-                }
-                _ => {
-                    // Generic mock for other accounts
-                    15234.78
-                }
-            };
-            
-            info!("Found account {} ({}) with balance: ${:.2}", account_number, self.config.account_name, mock_balance);
-            
-            Ok(crate::AccountData {
-                account_number: account_number.to_string(),
-                account_name: self.config.account_name.clone(),
-                balance: mock_balance,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            })
+            Err(e) => {
+                error!("❌ QuickBooks SDK not available: {}", e);
+                Err(e)
+            }
         }
     }
 
     #[cfg(windows)]
-    async fn get_account_balance_windows(&self, account_number: &str) -> Result<crate::AccountData> {
-        info!("Executing QuickBooks query for account: {}", account_number);
-        info!("Note: Account {} is a sub-account of 'BoA Accounts' under account 1000", account_number);
-
-        // Initialize COM
+    async fn perform_registration(&self) -> Result<()> {
+        info!("Starting QuickBooks registration process...");
+        
         unsafe {
             let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             if hr.is_err() {
-                return Err(anyhow::anyhow!("Failed to initialize COM: {:?}", hr));
+                // COM may already be initialized, which is fine
             }
         }
 
-        // Create QuickBooks session manager and execute query
-        let result = self.execute_account_query(account_number).await;
+        let result = self.register_application();
 
-        // Clean up COM
         unsafe {
             CoUninitialize();
         }
@@ -386,614 +101,360 @@ impl QuickBooksClient {
     }
 
     #[cfg(windows)]
-    async fn execute_account_query(&self, account_number: &str) -> Result<crate::AccountData> {
-        // Since COM objects are not Send, we need to do all COM operations synchronously
-        // and only use the async part for the final result processing
-        
-        // Try different QuickBooks SDK versions (starting with newer versions for QB Enterprise v24)
-        let versions = ["QBFC17.QBSessionManager", "QBFC16.QBSessionManager", "QBFC15.QBSessionManager", "QBFC14.QBSessionManager", "QBFC13.QBSessionManager"];
-        let mut session_created = false;
-        
-        for version in &versions {
-            info!("Trying QuickBooks SDK version: {}", version);
-            
-            let prog_id = HSTRING::from(*version);
-            let clsid_result = unsafe { CLSIDFromProgID(&prog_id) };
-            
-            match clsid_result {
-                Ok(clsid) => {
-                    let qb_app_result: windows::core::Result<IDispatch> = unsafe {
-                        CoCreateInstance(
-                            &clsid,
-                            None,
-                            CLSCTX_INPROC_SERVER,
-                        )
-                    };
-                    
-                    match qb_app_result {
-                        Ok(_session_manager) => {
-                            info!("QuickBooks session manager created successfully with version: {}", version);
-                            session_created = true;
-                            break;
-                        }
-                        Err(e) => {
-                            warn!("QuickBooks session manager creation failed for {}: {}", version, e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to get CLSID for {}: {}", version, e);
-                }
-            }
-        }
-        
-        if session_created {
-            self.query_account_sync(account_number).await
-        } else {
-            Err(anyhow::anyhow!("Failed to create QuickBooks session manager with any supported version"))
-        }
-    }
-
-    #[cfg(windows)]
-    async fn query_account_sync(&self, account_number: &str) -> Result<crate::AccountData> {
-        info!("Starting QuickBooks session for account query");
-        
-        // Check if we should use mock data
-        if self.config.company_file == "MOCK" {
-            return self.get_mock_account_data(account_number).await;
-        }
-        
-        // Attempt to implement actual QuickBooks SDK calls
-        info!("Attempting to connect to QuickBooks company file: {}", self.config.company_file);
-        info!("Querying account hierarchy for account {} ({})", account_number, self.config.account_name);
-        
-        // Try to get real QuickBooks data
-        match self.query_real_quickbooks_data(account_number).await {
-            Ok(account_data) => {
-                info!("Successfully retrieved real QuickBooks data for account {}", account_number);
-                Ok(account_data)
-            }
-            Err(e) => {
-                error!("Failed to retrieve real QuickBooks data: {}", e);
-                panic!("QuickBooks connection failed - cannot proceed without real data: {}", e);
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    async fn query_real_quickbooks_data(&self, account_number: &str) -> Result<crate::AccountData> {
-        info!("Implementing real QuickBooks SDK integration");
-        
-        // Create QuickBooks session manager (we know this works from before)
-        let session_manager = self.create_session_manager()?;
-        
-        // Begin QuickBooks session
-        info!("Beginning QuickBooks session...");
-        self.begin_session(&session_manager)?;
-        
-        // Query the account
-        let account_data = self.query_account_balance(&session_manager, account_number)?;
-        
-        // End session
-        info!("Ending QuickBooks session...");
-        self.end_session(&session_manager)?;
-        
-        Ok(account_data)
-    }
-
-    #[cfg(windows)]
     fn create_session_manager(&self) -> Result<IDispatch> {
-        let versions = ["QBFC17.QBSessionManager", "QBFC16.QBSessionManager", "QBFC15.QBSessionManager"];
+        // Try QuickBooks session manager classes in order of preference
+        let session_manager_classes = [
+            "QBFC16.QBSessionManager", // QB Enterprise v24+
+            "QBFC15.QBSessionManager", // QB Enterprise v23
+            "QBFC14.QBSessionManager", // QB Enterprise v22
+            "QBFC13.QBSessionManager", // QB Enterprise v21
+        ];
         
-        for version in &versions {
-            info!("Trying QuickBooks SDK version: {}", version);
+        for class_name in &session_manager_classes {
+            info!("Trying to create session manager: {}", class_name);
             
-            let prog_id = HSTRING::from(*version);
-            let clsid_result = unsafe { CLSIDFromProgID(&prog_id) };
+            let prog_id = HSTRING::from(*class_name);
             
-            match clsid_result {
-                Ok(clsid) => {
-                    let session_manager_result: windows::core::Result<IDispatch> = unsafe {
-                        CoCreateInstance(&clsid, None, CLSCTX_INPROC_SERVER)
-                    };
+            if let Ok(clsid) = unsafe { CLSIDFromProgID(&prog_id) } {
+                if let Ok(session_manager) = unsafe { 
+                    CoCreateInstance(&clsid, None, CLSCTX_INPROC_SERVER) 
+                } {
+                    info!("✅ Successfully created session manager: {}", class_name);
                     
-                    match session_manager_result {
-                        Ok(session_manager) => {
-                            info!("Successfully created session manager with {}", version);
+                    // Test the session manager functionality
+                    match self.test_session_manager(&session_manager) {
+                        Ok(_) => {
+                            info!("✅ Session manager functionality test passed!");
                             return Ok(session_manager);
                         }
                         Err(e) => {
-                            warn!("Failed to create session manager with {}: {}", version, e);
+                            error!("❌ Session manager functionality test failed: {}", e);
+                            info!("💡 This indicates the session manager object was created but is not functional");
+                            info!("💡 Common causes:");
+                            info!("   - QuickBooks Desktop is not running");
+                            info!("   - No company file is open in QuickBooks");
+                            info!("   - QuickBooks is not in a ready state");
+                            info!("   - Permission/security issues");
+                            continue; // Try next class
                         }
                     }
-                }
-                Err(e) => {
-                    warn!("Failed to get CLSID for {}: {}", version, e);
                 }
             }
         }
         
-        Err(anyhow::anyhow!("Failed to create QuickBooks session manager with any supported version"))
+        Err(anyhow::anyhow!("Failed to create QuickBooks session manager. Ensure QuickBooks Desktop is installed."))
     }
 
     #[cfg(windows)]
-    fn begin_session(&self, session_manager: &IDispatch) -> Result<()> {
-        info!("Calling OpenConnection...");
+    fn register_application(&self) -> Result<()> {
+        info!("Creating QuickBooks session manager...");
+        let session_manager = self.create_session_manager()?;
         
-        // First, call OpenConnection with application ID and connection type
-        let app_id = "QuickBooks-Sheets-Sync";
-        let app_name = "QuickBooks to Google Sheets Sync Service";
-        let _connection_type = 0; // localQBD = 0, remoteQBD = 1
+        info!("Attempting to register application with QuickBooks...");
         
-        let _result = self.call_method_with_params(
-            session_manager, 
-            "OpenConnection", 
-            &[
-                &self.create_variant_string(app_id)?,
-                &self.create_variant_string(app_name)?,  // Use more descriptive name
-            ]
-        )?;
-        info!("OpenConnection successful");
+        // Application details for registration
+        let app_id = "QuickBooks-Sheets-Sync-v1";
+        let app_name = "QuickBooks Sheets Sync";
         
-        // Add a small delay to let QuickBooks process the connection
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        // Try different OpenConnection methods
+        self.try_open_connection(&session_manager, app_id, app_name)?;
         
-        info!("Calling BeginSession...");
+        info!("✅ Successfully registered with QuickBooks!");
         
-        // Prepare parameters for BeginSession call - try different approaches
-        let company_file = if self.config.company_file == "AUTO" {
-            // For AUTO mode, try both empty string and null approaches
-            ""
-        } else {
-            &self.config.company_file
-        };
+        // Clean up the connection
+        self.close_connection(&session_manager)?;
         
-        info!("Attempting BeginSession with company file: '{}'", company_file);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn try_open_connection(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
+        info!("Attempting OpenConnection with AppID: '{}', AppName: '{}'", app_id, app_name);
         
-        // Determine connection mode preference from config
-        let connection_mode = self.config.connection_mode.as_deref().unwrap_or("auto");
-        info!("Connection mode preference: {}", connection_mode);
+        // Method 1: Try OpenConnection (traditional single parameter method)
+        if let Ok(_) = self.call_open_connection(session_manager, app_id) {
+            info!("✅ OpenConnection successful (traditional method)");
+            return Ok(());
+        }
         
-        // Try different modes in sequence based on user preference
-        let attempts_to_try = match connection_mode {
-            "multi-user" => vec![
-                // Prioritize multi-user mode
-                ("", 2), // qbFileOpenMultiUser
-                ("", 0), // qbFileOpenDoNotCare
-                ("", 1), // qbFileOpenSingleUser (fallback)
-                (company_file, 2), // qbFileOpenMultiUser with file
-                (company_file, 0), // qbFileOpenDoNotCare with file
-                (company_file, 1), // qbFileOpenSingleUser with file
-            ],
-            "single-user" => vec![
-                // Prioritize single-user mode
-                ("", 1), // qbFileOpenSingleUser
-                ("", 0), // qbFileOpenDoNotCare
-                ("", 2), // qbFileOpenMultiUser (fallback)
-                (company_file, 1), // qbFileOpenSingleUser with file
-                (company_file, 0), // qbFileOpenDoNotCare with file
-                (company_file, 2), // qbFileOpenMultiUser with file
-            ],
-            _ => vec![
-                // Auto mode - try all modes
-                ("", 2), // qbFileOpenMultiUser (default first)
-                ("", 0), // qbFileOpenDoNotCare
-                ("", 1), // qbFileOpenSingleUser
-                (company_file, 2), // qbFileOpenMultiUser with file
-                (company_file, 0), // qbFileOpenDoNotCare with file
-                (company_file, 1), // qbFileOpenSingleUser with file
-            ]
-        };
+        // Method 2: Try OpenConnection2 with 2 parameters
+        if let Ok(_) = self.call_open_connection2_basic(session_manager, app_id, app_name) {
+            info!("✅ OpenConnection2 successful (basic method)");
+            return Ok(());
+        }
         
-        // Call BeginSession method with multiple approaches
-        let mut attempts = 0;
-        let max_attempts = attempts_to_try.len();
+        // Method 3: Try OpenConnection2 with connection type parameter
+        if let Ok(_) = self.call_open_connection2_with_type(session_manager, app_id, app_name) {
+            info!("✅ OpenConnection2 successful (with connection type)");
+            return Ok(());
+        }
         
-        for (file_path, mode) in attempts_to_try.iter() {
-            attempts += 1;
-            let mode_description = match mode {
-                0 => "qbFileOpenDoNotCare",
-                1 => "qbFileOpenSingleUser",
-                2 => "qbFileOpenMultiUser",
-                _ => "unknown",
-            };
-            info!("Attempting BeginSession with file: '{}', mode: {} ({}) (attempt {}/{})", 
-                  file_path, mode, mode_description, attempts, max_attempts);
+        Err(anyhow::anyhow!("All OpenConnection methods failed. QuickBooks may need to authorize this application."))
+    }
+
+    #[cfg(windows)]
+    fn call_open_connection(&self, session_manager: &IDispatch, app_id: &str) -> Result<()> {
+        info!("Trying OpenConnection (1 parameter)...");
+        
+        let app_id_variant = self.create_string_variant(app_id)?;
+        
+        self.invoke_method(session_manager, "OpenConnection", &[&app_id_variant])
+            .map(|_| ())
+    }
+
+    #[cfg(windows)]
+    fn call_open_connection2_basic(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
+        info!("Trying OpenConnection2 (2 parameters)...");
+        
+        let app_id_variant = self.create_string_variant(app_id)?;
+        let app_name_variant = self.create_string_variant(app_name)?;
+        
+        self.invoke_method(session_manager, "OpenConnection2", &[&app_id_variant, &app_name_variant])
+            .map(|_| ())
+    }
+
+    #[cfg(windows)]
+    fn call_open_connection2_with_type(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
+        info!("Trying OpenConnection2 (3 parameters with connection types)...");
+        
+        let app_id_variant = self.create_string_variant(app_id)?;
+        let app_name_variant = self.create_string_variant(app_name)?;
+        
+        // Try different connection type values that are commonly used for local QuickBooks Desktop
+        let connection_types = [1, 0]; // 1 = localQBD (most common), 0 = default
+        
+        for &conn_type in &connection_types {
+            info!("  Trying connection type: {}", conn_type);
+            let conn_type_variant = self.create_int_variant(conn_type)?;
             
-            match self.call_method_with_params(
-                session_manager,
-                "BeginSession",
-                &[
-                    &self.create_variant_string(file_path)?,
-                    &self.create_variant_int(*mode)?,
-                ],
+            if let Ok(_) = self.invoke_method(
+                session_manager, 
+                "OpenConnection2", 
+                &[&app_id_variant, &app_name_variant, &conn_type_variant]
             ) {
-                Ok(_result) => {
-                    info!("✅ BeginSession successful with file: '{}', mode: {} ({}) on attempt {}", 
-                          file_path, mode, mode_description, attempts);
-                    return Ok(());
+                info!("  ✅ Success with connection type: {}", conn_type);
+                return Ok(());
+            }
+        }
+        
+        Err(anyhow::anyhow!("OpenConnection2 failed with all connection types"))
+    }
+
+    #[cfg(windows)]
+    fn close_connection(&self, session_manager: &IDispatch) -> Result<()> {
+        info!("Closing QuickBooks connection...");
+        
+        self.invoke_method(session_manager, "CloseConnection", &[])
+            .map(|_| ())
+    }
+
+    #[cfg(windows)]
+    fn test_session_manager(&self, session_manager: &IDispatch) -> Result<()> {
+        info!("🔍 Testing session manager functionality...");
+        
+        let mut tests_passed = 0;
+        let mut tests_failed = 0;
+        
+        // Test 1: Check if we can get basic object information
+        info!("  Test 1: Checking object type information...");
+        match self.get_property(session_manager, "TypeInfo") {
+            Ok(_) => {
+                info!("    ✅ TypeInfo property accessible");
+                tests_passed += 1;
+            }
+            Err(e) => {
+                info!("    ❌ TypeInfo property failed: {}", e);
+                tests_failed += 1;
+            }
+        }
+        
+        // Test 2: Try to get SDK version (this might work on some versions)
+        info!("  Test 2: Checking SDK version...");
+        match self.get_property(session_manager, "Version") {
+            Ok(version_variant) => {
+                if let Ok(version_str) = self.variant_to_string(&version_variant) {
+                    info!("    ✅ QuickBooks SDK Version: {}", version_str);
+                    tests_passed += 1;
+                } else {
+                    info!("    ⚠️ Version property exists but couldn't parse as string");
+                    tests_passed += 1; // Still counts as working
                 }
-                Err(e) if attempts < max_attempts => {
-                    warn!("❌ BeginSession failed with file: '{}', mode: {} ({}) on attempt {}: {}. Trying next approach...", 
-                          file_path, mode, mode_description, attempts, e);
-                    std::thread::sleep(std::time::Duration::from_millis(1000));
-                }
-                Err(e) => {
-                    error!("All BeginSession attempts failed. Last error: {}", e);
-                    return Err(e);
+            }
+            Err(e) => {
+                info!("    ❌ Version property failed: {}", e);
+                tests_failed += 1;
+            }
+        }
+        
+        // Test 3: Try a method that should be available even without a connection
+        info!("  Test 3: Testing basic method availability...");
+        match self.invoke_method(session_manager, "GetCurrentCompanyFileName", &[]) {
+            Ok(_) => {
+                info!("    ✅ GetCurrentCompanyFileName method is callable");
+                tests_passed += 1;
+            }
+            Err(e) => {
+                let error_msg = e.to_string();
+                if error_msg.contains("No company file is open") || 
+                   error_msg.contains("company file") ||
+                   error_msg.contains("not connected") {
+                    info!("    ✅ Method callable but no company file open: {}", error_msg);
+                    tests_passed += 1;
+                } else if error_msg.contains("0x80020009") {
+                    info!("    ❌ COM exception - object may not be functional: {}", error_msg);
+                    tests_failed += 1;
+                } else if error_msg.contains("0x80020006") {
+                    info!("    ❌ Method not found - wrong object type?: {}", error_msg);
+                    tests_failed += 1;
+                } else {
+                    info!("    ❌ Unexpected error: {}", error_msg);
+                    tests_failed += 1;
                 }
             }
         }
         
-        Ok(())
-    }
-
-    #[cfg(windows)] 
-    fn end_session(&self, session_manager: &IDispatch) -> Result<()> {
-        info!("Calling EndSession...");
-        
-        let _result = self.call_method_with_params(session_manager, "EndSession", &[])?;
-        
-        info!("EndSession successful");
-        
-        info!("Calling CloseConnection...");
-        let _result = self.call_method_with_params(session_manager, "CloseConnection", &[])?;
-        info!("CloseConnection successful");
-        
-        Ok(())
-    }
-
-    #[cfg(windows)]
-    fn query_account_balance(&self, session_manager: &IDispatch, account_number: &str) -> Result<crate::AccountData> {
-        info!("Creating message set request...");
-        
-        // Create request message set
-        let msg_set = self.call_method_with_params(
-            session_manager,
-            "CreateMsgSetRequest",
-            &[
-                &self.create_variant_string("US")?,      // Country
-                &self.create_variant_int(13)?,           // QB XML version
-                &self.create_variant_int(0)?,            // Minor version
-            ],
-        )?;
-        
-        let msg_set_dispatch = self.variant_to_dispatch(msg_set)?;
-        
-        info!("Appending AccountQuery request...");
-        
-        // Append AccountQuery request
-        let account_query = self.call_method_with_params(&msg_set_dispatch, "AppendAccountQueryRq", &[])?;
-        let _account_query_dispatch = self.variant_to_dispatch(account_query)?;
-        
-        // We could set filters here, but for now we'll query all accounts and filter in the response
-        // In a production system, you'd want to be more specific to reduce data transfer
-        
-        info!("Processing request...");
-        
-        // DoRequests expects the message set object directly, not wrapped in a VARIANT
-        info!("Calling DoRequests method...");
-        
-        // Create a VARIANT that contains the IDispatch directly - clone to get owned value
-        let msg_set_variant = VARIANT::from(msg_set_dispatch.clone());
-        
-        let response_set = self.call_method_with_params(
-            session_manager,
-            "DoRequests", 
-            &[&msg_set_variant],
-        )?;
-        
-        let response_set_dispatch = self.variant_to_dispatch(response_set)?;
-        
-        info!("Parsing response for account {}...", account_number);
-        
-        // Parse the response to find our account
-        self.parse_account_response(&response_set_dispatch, account_number)
-    }
-
-    #[cfg(windows)]
-    fn parse_account_response(&self, response_set: &IDispatch, target_account_number: &str) -> Result<crate::AccountData> {
-        // Get response list
-        let response_list = self.get_property(response_set, "ResponseList")?;
-        let response_list_dispatch = self.variant_to_dispatch(response_list)?;
-        
-        // Get count of responses
-        let count_variant = self.get_property(&response_list_dispatch, "Count")?;
-        let count = self.variant_to_int(count_variant)?;
-        
-        info!("Processing {} responses...", count);
-        
-        for i in 0..count {
-            // Get response at index i
-            let response = self.call_method_with_params(
-                &response_list_dispatch,
-                "GetAt",
-                &[&self.create_variant_int(i)?],
-            )?;
-            let response_dispatch = self.variant_to_dispatch(response)?;
-            
-            // Check if this is an AccountQuery response and if it was successful
-            let status_code = self.get_property(&response_dispatch, "StatusCode")?;
-            if self.variant_to_int(status_code)? != 0 {
-                continue; // Skip failed responses
+        // Test 4: Try another basic method
+        info!("  Test 4: Testing another basic method...");
+        match self.invoke_method(session_manager, "GetIsConnected", &[]) {
+            Ok(result) => {
+                info!("    ✅ GetIsConnected method callable");
+                // Try to interpret the result
+                if let Ok(connected_str) = self.variant_to_string(&result) {
+                    info!("    📋 Connection status: {}", connected_str);
+                }
+                tests_passed += 1;
             }
-            
-            // Get the detail (should be AccountRetList)
-            let detail = self.get_property(&response_dispatch, "Detail")?;
-            let detail_dispatch = self.variant_to_dispatch(detail)?;
-            
-            // This should be an AccountRetList - get the list of accounts
-            let account_list_count = self.get_property(&detail_dispatch, "Count")?;
-            let account_count = self.variant_to_int(account_list_count)?;
-            
-            info!("Found {} accounts in response", account_count);
-            
-            // Search through accounts for our target account number
-            for j in 0..account_count {
-                let account_ret = self.call_method_with_params(
-                    &detail_dispatch,
-                    "GetAt", 
-                    &[&self.create_variant_int(j)?],
-                )?;
-                let account_ret_dispatch = self.variant_to_dispatch(account_ret)?;
-                
-                // Get account number - this might be in different fields depending on QB version
-                let account_num = match self.get_property(&account_ret_dispatch, "AccountNumber") {
-                    Ok(variant) => self.variant_to_string(variant)?,
-                    Err(_) => {
-                        // Try alternative field names
-                        match self.get_property(&account_ret_dispatch, "AcctNum") {
-                            Ok(variant) => self.variant_to_string(variant)?,
-                            Err(_) => continue, // Skip accounts without account numbers
-                        }
-                    }
-                };
-                
-                if account_num == target_account_number {
-                    info!("Found target account {}!", target_account_number);
-                    
-                    // Get account name
-                    let account_name = match self.get_property(&account_ret_dispatch, "Name") {
-                        Ok(variant) => self.variant_to_string(variant)?,
-                        Err(_) => self.config.account_name.clone(),
-                    };
-                    
-                    // Get balance - this is the key data we need
-                    let balance_variant = self.get_property(&account_ret_dispatch, "Balance")?;
-                    let balance_str = self.variant_to_string(balance_variant)?;
-                    let balance: f64 = balance_str.parse()
-                        .map_err(|e| anyhow::anyhow!("Failed to parse balance '{}': {}", balance_str, e))?;
-                    
-                    info!("Successfully retrieved account balance: ${:.2}", balance);
-                    
-                    return Ok(crate::AccountData {
-                        account_number: target_account_number.to_string(),
-                        account_name,
-                        balance,
-                        timestamp: chrono::Utc::now().to_rfc3339(),
-                    });
+            Err(e) => {
+                let error_msg = e.to_string();
+                if error_msg.contains("0x80020006") {
+                    info!("    ⚠️ GetIsConnected method not available on this version");
+                    // Don't count as failure - method might not exist on all versions
+                } else {
+                    info!("    ❌ GetIsConnected failed: {}", error_msg);
+                    tests_failed += 1;
                 }
             }
         }
         
-        Err(anyhow::anyhow!("Account {} not found in QuickBooks response", target_account_number))
+        // Summary
+        info!("🔍 Session manager test results: {} passed, {} failed", tests_passed, tests_failed);
+        
+        if tests_passed > 0 {
+            info!("✅ Session manager has some functionality - proceeding");
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Session manager failed all tests - object is not functional. Make sure QuickBooks Desktop is running with a company file open."))
+        }
     }
 
-    // Helper methods for COM operations
     #[cfg(windows)]
-    fn call_method_with_params(&self, obj: &IDispatch, method_name: &str, params: &[&VARIANT]) -> Result<VARIANT> {
-        let mut dispid = 0;
-        
-        // Get method ID - make sure the wide string stays alive
-        let method_name_wide: Vec<u16> = method_name.encode_utf16().chain(std::iter::once(0)).collect();
+    fn get_property(&self, dispatch: &IDispatch, property_name: &str) -> Result<VARIANT> {
+        let property_name_bstr = BSTR::from(property_name);
+        let names = [PCWSTR::from_raw(property_name_bstr.as_ptr())];
+        let mut dispid = -1i32;
         
         unsafe {
-            let method_name_ptr = method_name_wide.as_ptr();
-            
-            // Add some debugging
-            info!("Calling GetIDsOfNames for method: {}", method_name);
-            info!("Method name pointer: 0x{:p}", method_name_ptr);
-            info!("Method name wide chars: {:?}", &method_name_wide[..std::cmp::min(method_name_wide.len(), 20)]);
-            
-            let result = obj.GetIDsOfNames(
+            dispatch.GetIDsOfNames(
                 &windows::core::GUID::zeroed(),
-                &PCWSTR(method_name_ptr),
+                names.as_ptr(),
                 1,
-                0x0409, // LCID_ENGLISH_US
-                &mut dispid as *mut i32,
-            );
-            
-            info!("GetIDsOfNames result: {:?}", result);
-            
-            result.map_err(|e| anyhow::anyhow!("Failed to get method ID for '{}': {}", method_name, e))?;
+                0x0409,
+                &mut dispid,
+            )?;
         }
         
-        info!("Got method ID {} for {}", dispid, method_name);
-        
-        // Prepare parameters
-        let mut variant_args: Vec<VARIANT> = params.iter().rev().map(|p| (*p).clone()).collect();
-        let mut dispparams = DISPPARAMS {
-            rgvarg: if variant_args.is_empty() { std::ptr::null_mut() } else { variant_args.as_mut_ptr() },
+        let dispparams = DISPPARAMS {
+            rgvarg: std::ptr::null_mut(),
+            cArgs: 0,
             rgdispidNamedArgs: std::ptr::null_mut(),
-            cArgs: variant_args.len() as u32,
             cNamedArgs: 0,
         };
         
         let mut result = VARIANT::default();
-        let mut excep_info = EXCEPINFO::default();
+        let mut excepinfo = EXCEPINFO::default();
         let mut arg_err = 0u32;
         
-        // Call method
         unsafe {
-            info!("Calling Invoke for method: {} with dispid: {}", method_name, dispid);
-            
-            let invoke_result = obj.Invoke(
+            dispatch.Invoke(
                 dispid,
                 &windows::core::GUID::zeroed(),
-                0x0409, // LCID_ENGLISH_US
-                DISPATCH_METHOD,
-                &mut dispparams,
-                Some(&mut result as *mut VARIANT),
-                Some(&mut excep_info as *mut EXCEPINFO),
-                Some(&mut arg_err as *mut u32),
-            );
-            
-            info!("Invoke result: {:?}", invoke_result);
-            
-            invoke_result.map_err(|e| anyhow::anyhow!("Failed to call method '{}': {}", method_name, e))?;
-        }
-        
-        info!("Successfully called method: {}", method_name);
-        Ok(result)
-    }
-
-    #[cfg(windows)]
-    fn get_property(&self, obj: &IDispatch, property_name: &str) -> Result<VARIANT> {
-        let _property_name_bstr = BSTR::from(property_name);
-        let mut dispid = 0;
-        
-        // Get property ID
-        unsafe {
-            let property_name_wide: Vec<u16> = property_name.encode_utf16().chain(std::iter::once(0)).collect();
-            let property_name_ptr = property_name_wide.as_ptr();
-            obj.GetIDsOfNames(
-                &windows::core::GUID::zeroed(),
-                &PCWSTR(property_name_ptr),
-                1,
-                0x0409, // LCID_ENGLISH_US  
-                &mut dispid as *mut i32,
-            ).map_err(|e| anyhow::anyhow!("Failed to get property ID for '{}': {}", property_name, e))?;
-        }
-        
-        let mut dispparams = DISPPARAMS::default();
-        let mut result = VARIANT::default();
-        let mut excep_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
-        
-        // Get property
-        unsafe {
-            obj.Invoke(
-                dispid,
-                &windows::core::GUID::zeroed(),
-                0x0409, // LCID_ENGLISH_US
-                DISPATCH_PROPERTYGET,
-                &mut dispparams,
-                Some(&mut result as *mut VARIANT),
-                Some(&mut excep_info as *mut EXCEPINFO), 
-                Some(&mut arg_err as *mut u32),
-            ).map_err(|e| anyhow::anyhow!("Failed to get property '{}': {}", property_name, e))?;
+                0x0409,
+                DISPATCH_FLAGS(1), // DISPATCH_PROPERTYGET
+                &dispparams,
+                Some(&mut result),
+                Some(&mut excepinfo),
+                Some(&mut arg_err),
+            )?;
         }
         
         Ok(result)
     }
 
     #[cfg(windows)]
-    fn create_variant_string(&self, s: &str) -> Result<VARIANT> {
-        // Use the direct VARIANT creation from the windows crate
-        let bstr = BSTR::from(s);
+    fn variant_to_string(&self, variant: &VARIANT) -> Result<String> {
+        match BSTR::try_from(variant) {
+            Ok(bstr) => Ok(bstr.to_string()),
+            Err(_) => Err(anyhow::anyhow!("Could not convert VARIANT to string"))
+        }
+    }
+
+    // Helper methods for COM operations
+
+    #[cfg(windows)]
+    fn create_string_variant(&self, value: &str) -> Result<VARIANT> {
+        let bstr = BSTR::from(value);
         Ok(VARIANT::from(bstr))
     }
 
     #[cfg(windows)]
-    fn create_variant_int(&self, i: i32) -> Result<VARIANT> {
-        // Use the direct VARIANT creation from the windows crate
-        Ok(VARIANT::from(i))
+    fn create_int_variant(&self, value: i32) -> Result<VARIANT> {
+        Ok(VARIANT::from(value))
     }
 
     #[cfg(windows)]
-    fn variant_to_dispatch(&self, variant: VARIANT) -> Result<IDispatch> {
-        use std::convert::TryFrom;
+    fn invoke_method(&self, dispatch: &IDispatch, method_name: &str, params: &[&VARIANT]) -> Result<VARIANT> {
+        // Get method DISPID
+        let method_name_bstr = BSTR::from(method_name);
+        let names = [PCWSTR::from_raw(method_name_bstr.as_ptr())];
+        let mut dispid = -1i32;
         
-        // Use the windows crate's built-in TryFrom implementation
-        // This will handle the variant type checking internally
-        match IDispatch::try_from(&variant) {
-            Ok(dispatch) => {
-                info!("Successfully converted VARIANT to IDispatch using windows crate TryFrom");
-                Ok(dispatch)
-            }
-            Err(e) => {
-                error!("Failed to convert VARIANT to IDispatch: {:?}", e);
-                Err(anyhow::anyhow!("Failed to convert VARIANT to IDispatch: {}", e))
-            }
+        unsafe {
+            dispatch.GetIDsOfNames(
+                &windows::core::GUID::zeroed(),
+                names.as_ptr(),
+                1,
+                0x0409, // LCID_ENGLISH_US
+                &mut dispid,
+            )?;
         }
-    }
-
-    #[cfg(windows)]
-    fn dispatch_to_variant(&self, dispatch: &IDispatch) -> Result<VARIANT> {
-        // Convert IDispatch to VARIANT using the Windows crate
-        // This should create a VARIANT with VT_DISPATCH type containing the IDispatch pointer
-        // Clone to get owned value since VARIANT::from expects owned IDispatch
-        let variant = VARIANT::from(dispatch.clone());
-        Ok(variant)
-    }
-
-    #[cfg(windows)]
-    fn variant_to_string(&self, variant: VARIANT) -> Result<String> {
-        use std::convert::TryFrom;
         
-        info!("Converting VARIANT to string");
-        
-        // Try to convert using windows crate built-in conversion
-        match BSTR::try_from(&variant) {
-            Ok(bstr) => {
-                let result = bstr.to_string();
-                info!("Successfully converted VARIANT to string: {}", result);
-                Ok(result)
-            }
-            Err(e) => {
-                warn!("Failed to convert VARIANT to BSTR: {:?}", e);
-                // For now, return a mock value since we're primarily testing the IDispatch conversion
-                Ok("mock_string".to_string())
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    fn variant_to_int(&self, _variant: VARIANT) -> Result<i32> {
-        info!("Converting VARIANT to int");
-        
-        // For now, return a mock value since we're primarily testing the IDispatch conversion
-        // The Windows crate doesn't provide TryFrom implementations for primitive types
-        Ok(0)
-    }
-    
-    #[cfg(windows)]
-    async fn get_mock_account_data(&self, account_number: &str) -> Result<crate::AccountData> {
-        // Mock implementation with realistic sub-account structure
-        info!("Using mock data for account {} ({})", account_number, self.config.account_name);
-        
-        // Simulate different balances based on account number to help with debugging
-        let mock_balance = match account_number {
-            "9445" => {
-                // Simulate the actual INCOME TAX account with realistic values
-                let base_balance = -18745.32; // Negative because it's a liability/tax account
-                let timestamp = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
-                let daily_variation = (timestamp as f64 / 86400.0).sin() * 1500.0;
-                base_balance + daily_variation
-            }
-            _ => {
-                // Generic mock for other accounts
-                15234.78
-            }
+        // Prepare parameters (in reverse order for IDispatch)
+        let mut param_array: Vec<VARIANT> = params.iter().rev().map(|&p| p.clone()).collect();
+        let dispparams = DISPPARAMS {
+            rgvarg: if param_array.is_empty() { std::ptr::null_mut() } else { param_array.as_mut_ptr() },
+            cArgs: params.len() as u32,
+            rgdispidNamedArgs: std::ptr::null_mut(),
+            cNamedArgs: 0,
         };
         
-        info!("Mock account {} ({}) balance: ${:.2}", account_number, self.config.account_name, mock_balance);
+        // Invoke the method
+        let mut result = VARIANT::default();
+        let mut excepinfo = EXCEPINFO::default();
+        let mut arg_err = 0u32;
         
-        Ok(crate::AccountData {
-            account_number: account_number.to_string(),
-            account_name: self.config.account_name.clone(),
-            balance: mock_balance,
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        })
+        unsafe {
+            dispatch.Invoke(
+                dispid,
+                &windows::core::GUID::zeroed(),
+                0x0409,
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
+                &dispparams,
+                Some(&mut result),
+                Some(&mut excepinfo),
+                Some(&mut arg_err),
+            )?;
+        }
+        
+        Ok(result)
     }
 }
-
-// Additional helper functions for QuickBooks SDK integration would go here
-// This would include:
-// - QBXML request/response handling
-// - Account query construction  
-// - Balance parsing from QuickBooks responses
-// - Error handling for QuickBooks-specific errors

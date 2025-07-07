@@ -1,10 +1,6 @@
 use anyhow::{Context, Result};
-use log::{error, info, warn};
-use serde::{Deserialize, Serialize};
+use log::{error, info};
 use std::env;
-use std::time::Duration;
-use tokio::time;
-use tokio_cron_scheduler::{Job, JobScheduler};
 
 mod config;
 mod quickbooks;
@@ -12,263 +8,116 @@ mod sheets;
 
 use config::Config;
 use quickbooks::QuickBooksClient;
-use sheets::GoogleSheetsClient;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AccountData {
+    pub name: String,
     pub account_number: String,
-    pub account_name: String,
+    pub account_type: String,
     pub balance: f64,
-    pub timestamp: String,
+    pub description: Option<String>,
+}
+
+fn print_instructions() {
+    println!("🔧 QuickBooks Desktop Integration Service");
+    println!("==========================================");
+    println!();
+    println!("📋 Prerequisites before running this service:");
+    println!("   1. QuickBooks Desktop must be installed");
+    println!("   2. QuickBooks Desktop must be RUNNING");
+    println!("   3. A company file must be OPEN in QuickBooks");
+    println!("   4. QuickBooks should be in a ready state (not processing anything)");
+    println!();
+    println!("⚠️  If you see 'Session manager functionality test failed', please:");
+    println!("   • Open QuickBooks Desktop");
+    println!("   • Open a company file");
+    println!("   • Wait for QuickBooks to finish loading completely");
+    println!("   • Then run this service again");
+    println!();
+    println!("Starting QuickBooks integration test...");
+    println!("========================================");
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Parse command line arguments first to determine log level
+    // Initialize logging
     let args: Vec<String> = env::args().collect();
     let verbose = args.contains(&"--verbose".to_string()) || args.contains(&"-v".to_string());
-    let help = args.contains(&"--help".to_string()) || args.contains(&"-h".to_string());
-
-    // Initialize logging once at the start
-    let log_result = if verbose {
+    
+    if verbose {
         env_logger::builder()
             .filter_level(log::LevelFilter::Debug)
-            .try_init()
+            .init();
     } else {
-        env_logger::try_init()
-    };
-    
-    // Log initialization result (only if it succeeded)
-    if log_result.is_ok() {
-        // Logger was successfully initialized
-    } else {
-        // Logger was already initialized (this is fine)
+        env_logger::init();
     }
 
-    info!("Starting QuickBooks to Google Sheets sync service");
-
     // Show help if requested
-    if help {
-        println!("QuickBooks to Google Sheets Sync Service");
-        println!("Usage: qb_sync.exe [OPTIONS]");
-        println!();
-        println!("OPTIONS:");
-        println!("  --test-connection    Test connections and exit");
-        println!("  --skip-sheets-test   Skip Google Sheets connection test");
-        println!("  --show-config        Show current configuration and exit");
-        println!("  --verbose, -v        Enable verbose logging");
-        println!("  --help, -h           Show this help message");
-        println!();
-        println!("Examples:");
-        println!("  qb_sync.exe                    # Run the service normally");
-        println!("  qb_sync.exe --test-connection  # Test connections only");
-        println!("  qb_sync.exe --verbose          # Run with detailed logging");
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
         return Ok(());
     }
 
-    // Parse other command line arguments
-    let test_connection = args.contains(&"--test-connection".to_string());
-    let skip_sheets_test = args.contains(&"--skip-sheets-test".to_string());
-    let show_config = args.contains(&"--show-config".to_string());
-
+    print_instructions();
+    
     // Load configuration
     let config = Config::load()
         .context("Failed to load configuration")?;
 
-    // Show configuration if requested (without sensitive data)
-    if show_config {
-        info!("Configuration loaded:");
-        info!("  QuickBooks company_file: {}", config.quickbooks.company_file);
-        info!("  QuickBooks account_number: {}", config.quickbooks.account_number);
-        info!("  Google Sheets webapp_url: {}", config.google_sheets.webapp_url);
-        info!("  Google Sheets spreadsheet_id: {}", config.google_sheets.spreadsheet_id);
-        info!("  Google Sheets sheet_name: {:?}", config.google_sheets.sheet_name);
-        info!("  Google Sheets cell_address: {}", config.google_sheets.cell_address);
-        info!("  API key configured: {}", if config.google_sheets.api_key.is_empty() { "NO" } else { "YES" });
-        return Ok(());
-    }
-
-    // Initialize clients
+    // Initialize QuickBooks client
     let qb_client = QuickBooksClient::new(&config.quickbooks)
         .context("Failed to initialize QuickBooks client")?;
-    
-    let sheets_client = GoogleSheetsClient::new(&config.google_sheets)
-        .context("Failed to initialize Google Sheets client")?;
 
-    // Test initial connection
-    info!("Testing QuickBooks connection...");
-    test_quickbooks_connection(&qb_client, &config).await?;
+    // Test 1: Check if QuickBooks SDK is available
+    info!("📋 Step 1: Testing QuickBooks SDK availability...");
+    qb_client.test_connection().await
+        .context("QuickBooks SDK test failed")?;
 
-    if !skip_sheets_test {
-        info!("Testing Google Sheets connection...");
-        test_sheets_connection(&sheets_client, &config).await?;
-    } else {
-        warn!("Skipping Google Sheets connection test");
-    }
-
-    // If only testing connections, exit here
-    if test_connection {
-        info!("Connection tests completed successfully");
-        return Ok(());
-    }
-
-    // Set up scheduler
-    let scheduler = JobScheduler::new().await?;
-
-    // Clone data for the job closure
-    let qb_client_clone = qb_client.clone();
-    let sheets_client_clone = sheets_client.clone();
-    let config_clone = config.clone();
-
-    // Create the sync job
-    let sync_job = Job::new_async(config.schedule.cron_expression.as_str(), move |_uuid, _l| {
-        let qb_client = qb_client_clone.clone();
-        let sheets_client = sheets_client_clone.clone();
-        let config = config_clone.clone();
-        
-        Box::pin(async move {
-            if let Err(e) = sync_account_data(&qb_client, &sheets_client, &config).await {
-                error!("Sync job failed: {}", e);
-            }
-        })
-    })?;
-
-    scheduler.add(sync_job).await?;
-    scheduler.start().await?;
-
-    info!("Scheduler started with cron expression: {}", config.schedule.cron_expression);
-    info!("Running initial sync...");
-    
-    // Run initial sync
-    sync_account_data(&qb_client, &sheets_client, &config).await?;
-
-    info!("✅ Initial sync completed successfully!");
-    info!("🕐 Service now running on schedule: {}", config.schedule.cron_expression);
-    info!("📊 Will sync account {} to Google Sheets every time the schedule triggers", config.quickbooks.account_number);
-    info!("🛑 Press Ctrl+C to stop the service");
-    
-    // Keep the service running with periodic status updates
-    let mut counter = 0;
-    loop {
-        time::sleep(Duration::from_secs(60)).await;
-        counter += 1;
-        
-        // Show status every 5 minutes
-        if counter % 5 == 0 {
-            info!("🔄 Service running normally ({} minutes elapsed)", counter);
+    // Test 2: Attempt to register with QuickBooks
+    info!("📋 Step 2: Attempting to register with QuickBooks...");
+    match qb_client.register_with_quickbooks().await {
+        Ok(()) => {
+            info!("🎉 SUCCESS! Application has been registered with QuickBooks.");
+            info!("📝 Next steps:");
+            info!("   1. QuickBooks should have shown an authorization dialog");
+            info!("   2. The application is now registered and can connect");
+            info!("   3. You can now implement account data retrieval");
+        }
+        Err(e) => {
+            error!("❌ Registration failed: {}", e);
+            info!("💡 Troubleshooting tips:");
+            info!("   1. Make sure QuickBooks Desktop is running");
+            info!("   2. Make sure a company file is open");
+            info!("   3. QuickBooks may show an authorization dialog - approve it");
+            info!("   4. Try running QuickBooks as Administrator");
+            return Err(e);
         }
     }
-}
-
-async fn sync_account_data(
-    qb_client: &QuickBooksClient,
-    sheets_client: &GoogleSheetsClient,
-    config: &Config,
-) -> Result<()> {
-    info!("🔄 Starting account sync for account {}", config.quickbooks.account_number);
-    let start_time = std::time::Instant::now();
-
-    // Get account balance from QuickBooks
-    info!("📊 Fetching account data from QuickBooks...");
-    let account_data = qb_client
-        .get_account_balance(&config.quickbooks.account_number)
-        .await
-        .context("Failed to get account balance from QuickBooks")?;
-
-    info!("✅ Retrieved account data: {} = ${:.2}", 
-          account_data.account_name, 
-          account_data.balance);
-
-    // Send data to Google Sheets
-    info!("📝 Updating Google Sheets...");
-    sheets_client
-        .update_account_data(&account_data, config)
-        .await
-        .context("Failed to update Google Sheets")?;
-
-    let elapsed = start_time.elapsed();
-    info!("✅ Sync completed successfully in {:.2}s", elapsed.as_secs_f64());
-    info!("📊 Account {} ({}) = ${:.2} updated in cell {}", 
-          account_data.account_number,
-          account_data.account_name,
-          account_data.balance,
-          config.google_sheets.cell_address);
 
     Ok(())
 }
 
-async fn test_quickbooks_connection(
-    qb_client: &QuickBooksClient,
-    config: &Config,
-) -> Result<()> {
-    info!("Testing QuickBooks connection...");
-    
-    // First, test basic QuickBooks availability
-    match qb_client.test_connection().await {
-        Ok(()) => {
-            info!("QuickBooks application is available");
-        }
-        Err(e) => {
-            error!("QuickBooks application connection failed: {}", e);
-            warn!("Make sure QuickBooks Desktop Enterprise is running");
-            return Err(e);
-        }
-    }
-    
-    // Next, test company file connection
-    match qb_client.connect_to_quickbooks().await {
-        Ok(()) => {
-            info!("Successfully connected to QuickBooks company file");
-        }
-        Err(e) => {
-            error!("QuickBooks company file connection failed: {}", e);
-            warn!("Connection method: {}", 
-                  if config.quickbooks.company_file.is_empty() {
-                      "Interactive file selection"
-                  } else if config.quickbooks.company_file == "AUTO" {
-                      "Currently open company file"
-                  } else {
-                      "Specific file path"
-                  });
-            
-            if config.quickbooks.company_file != "AUTO" && !config.quickbooks.company_file.is_empty() {
-                warn!("Company file: {}", config.quickbooks.company_file);
-                warn!("Make sure the file exists and is accessible");
-            } else {
-                warn!("Make sure QuickBooks is running with a company file open");
-            }
-            
-            return Err(e);
-        }
-    }
-    
-    // Finally, get list of open company files for informational purposes
-    match qb_client.get_open_company_files().await {
-        Ok(files) => {
-            info!("Available company files: {:?}", files);
-        }
-        Err(e) => {
-            warn!("Could not get list of open company files: {}", e);
-        }
-    }
-    
-    Ok(())
-}
-
-async fn test_sheets_connection(
-    sheets_client: &GoogleSheetsClient,
-    config: &Config,
-) -> Result<()> {
-    match sheets_client.test_connection().await {
-        Ok(()) => {
-            info!("Google Sheets connection successful");
-            Ok(())
-        }
-        Err(e) => {
-            error!("Google Sheets connection failed: {}", e);
-            warn!("Check your Google Apps Script URL and API key");
-            warn!("URL: {}", config.google_sheets.webapp_url);
-            Err(e)
-        }
-    }
+fn print_help() {
+    println!("QuickBooks Sheets Sync - Clean Registration Test");
+    println!();
+    println!("This program tests basic QuickBooks Desktop integration and registration.");
+    println!();
+    println!("USAGE:");
+    println!("    cargo run [OPTIONS]");
+    println!();
+    println!("OPTIONS:");
+    println!("    --verbose, -v    Enable verbose logging");
+    println!("    --help, -h       Show this help message");
+    println!();
+    println!("PREREQUISITES:");
+    println!("    1. QuickBooks Desktop Enterprise must be installed and running");
+    println!("    2. A company file must be open in QuickBooks");
+    println!("    3. QuickBooks should be in single-user mode (not multi-user)");
+    println!("    4. This program may need to run as Administrator");
+    println!("    5. Make sure no other QuickBooks integrations are running");
+    println!();
+    println!("WHAT THIS DOES:");
+    println!("    1. Tests if QuickBooks SDK components are available");
+    println!("    2. Attempts to register the application with QuickBooks");
+    println!("    3. Shows success/failure and next steps");
 }
