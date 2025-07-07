@@ -322,7 +322,8 @@ impl QuickBooksClient {
             match self.get_property(session_manager, "Company") {
                 Ok(company) => {
                     info!("Got company object");
-                    if let Some(company_dispatch) = unsafe { company.get_dispatch() } {
+                    let company_dispatch = unsafe { company.pdisp };
+                    if !company_dispatch.is_null() {
                         match self.get_property(company_dispatch, "FileName") {
                             Ok(current_file) => {
                                 match self.variant_to_string(&current_file) {
@@ -621,7 +622,8 @@ impl QuickBooksClient {
     #[cfg(windows)]
     fn variant_to_dispatch(&self, variant: &VARIANT) -> Result<IDispatch> {
         unsafe {
-            if let Some(dispatch) = unsafe { variant.get_dispatch() } {
+            let dispatch = unsafe { variant.pdisp };
+            if !dispatch.is_null() {
                 Ok(dispatch)
             } else {
                 Err(anyhow::anyhow!("Failed to convert VARIANT to IDispatch"))

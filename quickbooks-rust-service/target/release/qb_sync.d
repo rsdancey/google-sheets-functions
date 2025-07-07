@@ -1,1 +1,0 @@
-F:\google-sheets-tools\quickbooks-rust-service\target\release\qb_sync.exe: F:\google-sheets-tools\quickbooks-rust-service\src\config.rs F:\google-sheets-tools\quickbooks-rust-service\src\main.rs F:\google-sheets-tools\quickbooks-rust-service\src\quickbooks.rs F:\google-sheets-tools\quickbooks-rust-service\src\sheets.rs
