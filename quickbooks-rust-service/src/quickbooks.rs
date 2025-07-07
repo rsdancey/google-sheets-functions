@@ -320,8 +320,16 @@ impl QuickBooksClient {
         let effective_company_file = if company_file.is_empty() {
             match self.invoke_method(session_manager, "GetCurrentCompanyFileName_X", &[]) {
                 Ok(current_file) => {
-                    info!("Found currently open company file: {}", current_file);
-                    current_file
+                    match self.variant_to_string(&current_file) {
+                        Ok(file_path) => {
+                            info!("Found currently open company file: {}", file_path);
+                            file_path
+                        }
+                        Err(e) => {
+                            info!("Failed to convert company file path to string: {}", e);
+                            return Err(anyhow::anyhow!("Failed to get current company file path: {}", e));
+                        }
+                    }
                 }
                 Err(e) => {
                     info!("No company file currently open: {}", e);
