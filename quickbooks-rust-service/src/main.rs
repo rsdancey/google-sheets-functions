@@ -1,13 +1,206 @@
-use anyhow::{Context, Result};
-use log::{error, info};
-use std::env;
+use anyhow::Result;
+use log::info;
+use serde::Deserialize;
+use std::fs;
 
-mod config;
 mod quickbooks;
-mod sheets;
-
-use config::Config;
 use quickbooks::QuickBooksClient;
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    quickbooks: QuickBooksConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct QuickBooksConfig {
+    app_id: String,
+    app_name: String,
+}
+
+fn main() -> Result<()> {
+    // Initialize logging
+    env_logger::init();
+
+    // Load configuration
+    let config_str = fs::read_to_string("config.json")?;
+    let config: Config = serde_json::from_str(&config_str)?;
+
+    // Create QuickBooks client
+    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
+
+    // Check if QuickBooks is running
+    if !qb.is_quickbooks_running() {
+        info!("QuickBooks is not running!");
+        return Ok(());
+    }
+
+    // Connect to QuickBooks
+    qb.connect()?;
+    info!("Connected to QuickBooks");
+
+    // Start a session
+    qb.begin_session()?;
+    info!("Session started");
+
+    // Get company file
+    let company_file = qb.get_company_file_name()?;
+    info!("Current company file: {}", company_file);
+
+    Ok(())
+}
+
+use anyhow::Result;
+use log::info;
+use serde::Deserialize;
+use std::fs;
+
+mod quickbooks;
+use quickbooks::QuickBooksClient;
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    quickbooks: QuickBooksConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct QuickBooksConfig {
+    app_id: String,
+    app_name: String,
+}
+
+fn main() -> Result<()> {
+    // Initialize logging
+    env_logger::init();
+
+    // Load configuration
+    let config_str = fs::read_to_string("config.json")?;
+    let config: Config = serde_json::from_str(&config_str)?;
+
+    // Create QuickBooks client
+    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
+
+    // Check if QuickBooks is running
+    if !qb.is_quickbooks_running() {
+        info!("QuickBooks is not running!");
+        return Ok(());
+    }
+
+    // Connect to QuickBooks
+    qb.connect()?;
+    info!("Connected to QuickBooks");
+
+    // Start a session
+    qb.begin_session()?;
+    info!("Session started");
+
+    // Get company file
+    let company_file = qb.get_company_file_name()?;
+    info!("Current company file: {}", company_file);
+
+    Ok(())
+}
+
+use anyhow::Result;
+use log::info;
+use serde::Deserialize;
+use std::fs;
+
+mod quickbooks;
+use quickbooks::QuickBooksClient;
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    quickbooks: QuickBooksConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct QuickBooksConfig {
+    app_id: String,
+    app_name: String,
+}
+
+fn main() -> Result<()> {
+    // Initialize logging
+    env_logger::init();
+
+    // Load configuration
+    let config_str = fs::read_to_string("config.json")?;
+    let config: Config = serde_json::from_str(&config_str)?;
+
+    // Create QuickBooks client
+    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
+
+    // Check if QuickBooks is running
+    if !qb.is_quickbooks_running() {
+        info!("QuickBooks is not running!");
+        return Ok(());
+    }
+
+    // Connect to QuickBooks
+    qb.connect()?;
+    info!("Connected to QuickBooks");
+
+    // Start a session
+    qb.begin_session()?;
+    info!("Session started");
+
+    // Get company file
+    let company_file = qb.get_company_file_name()?;
+    info!("Current company file: {}", company_file);
+
+    Ok(())
+}
+
+use anyhow::Result;
+use log::info;
+use serde::Deserialize;
+use std::fs;
+
+mod quickbooks;
+use quickbooks::QuickBooksClient;
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    quickbooks: QuickBooksConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct QuickBooksConfig {
+    app_id: String,
+    app_name: String,
+}
+
+fn main() -> Result<()> {
+    // Initialize logging
+    env_logger::init();
+
+    // Load configuration
+    let config_str = fs::read_to_string("config.json")?;
+    let config: Config = serde_json::from_str(&config_str)?;
+
+    // Create QuickBooks client
+    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
+
+    // Check if QuickBooks is running
+    if !qb.is_quickbooks_running() {
+        info!("QuickBooks is not running!");
+        return Ok(());
+    }
+
+    // Connect to QuickBooks
+    qb.connect()?;
+    info!("Connected to QuickBooks");
+
+    // Start a session
+    qb.begin_session()?;
+    info!("Session started");
+
+    // Get company file
+    let company_file = qb.get_company_file_name()?;
+    info!("Current company file: {}", company_file);
+
+    Ok(())
+}
 
 #[derive(Debug, Clone)]
 pub struct AccountData {

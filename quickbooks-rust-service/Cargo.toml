@@ -8,39 +8,16 @@ name = "qb_sync"
 path = "src/main.rs"
 
 [dependencies]
-# HTTP client for Google Sheets API
-reqwest = { version = "0.12", features = ["json"] }
-# JSON serialization
-serde = { version = "1.0", features = ["derive"] }
-# Async runtime (reduced features)
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "time"] }
-# Error handling
 anyhow = "1.0"
-# Logging
 log = "0.4"
 env_logger = "0.11"
-# Configuration (reduced features)
-figment = { version = "0.10", features = ["toml"] }
-# Scheduling
-tokio-cron-scheduler = "0.11"
-# Date/time handling (no serde feature)
-chrono = "0.4"
-# Windows-specific QuickBooks COM interface (Server optimized)
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
-    "Win32_System_Com",
-    "Win32_System_Ole",
+windows = { version = "0.35", features = [
     "Win32_Foundation",
-    "Win32_System_Variant",
-    "Win32_System_Com_StructuredStorage",
-    "Win32_System_Threading",
-    "Win32_Security",
-    "Win32_Globalization",
-    "Win32_System_Services",           # Added for service detection
-    "Win32_Security_Authorization",    # Added for user impersonation  
-    "Win32_System_WindowsProgramming", # Added for server utilities
-    "Win32_System_Registry",           # Added for QuickBooks application registration
-    "implement",
-] }
-# Optional: Windows Service support for server deployment
-# windows-service = "0.6"  # Uncomment if running as Windows Service
+    "Win32_System_Com",
+    "Win32_UI_WindowsAndMessaging",
+    "implement"
+]}
