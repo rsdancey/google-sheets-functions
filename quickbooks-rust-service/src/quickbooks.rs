@@ -318,7 +318,7 @@ impl QuickBooksClient {
     fn begin_session(&self, session_manager: &IDispatch, company_file: &str) -> Result<String> {
         // First try to get current company file if no file specified
         let effective_company_file = if company_file.is_empty() {
-            match self.invoke_method(session_manager, "CompanyFileName", &[]) {
+            match self.invoke_method(session_manager, "GetCurrentCompanyFileName", &[]) {
                 Ok(current_file) => {
                     match self.variant_to_string(&current_file) {
                         Ok(file_path) => {
