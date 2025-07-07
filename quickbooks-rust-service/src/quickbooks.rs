@@ -787,10 +787,16 @@ impl QuickBooksClient {
     }
 
     // Convenience method to test account data retrieval
+    #[cfg(windows)]
     pub async fn test_account_data_retrieval(&self) -> Result<String> {
         let xml_request = self.create_account_query_xml();
         info!("Testing account data retrieval with XML request...");
         
         self.process_xml_request(&xml_request).await
+    }
+
+    #[cfg(not(windows))]
+    pub async fn test_account_data_retrieval(&self) -> Result<String> {
+        Err(anyhow::anyhow!("Account data retrieval is only supported on Windows"))
     }
 }

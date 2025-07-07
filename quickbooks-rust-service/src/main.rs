@@ -76,13 +76,13 @@ async fn main() -> Result<()> {
     // Test 2: Attempt to register with QuickBooks
     info!("📋 Step 2: Attempting to connect and register with QuickBooks...");
     match qb_client.register_with_quickbooks().await {
-        Ok(()) => {
+        Ok(()) => {
             info!("🎉 SUCCESS! Application connected and registered with QuickBooks.");
             
             // Test 3: Test XML processing (account data retrieval)
             info!("🗒️ Step 3: Testing XML processing (account data retrieval)...");
             match qb_client.test_account_data_retrieval().await {
-                Ok(xml_response) => {
+                Ok(xml_response) => {
                     info!("✅ Account data retrieval successful!");
                     info!("📄 XML Response received ({} characters)", xml_response.len());
                     
@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
                         info!("📋 Full response: {}", xml_response);
                     }
                 }
-                Err(e) => {
+                Err(e) => {
                     error!("❌ Account data retrieval failed: {}", e);
                     info!("💡 This may be expected if:");
                     info!("   1. Company file has no accounts");
@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
             info!("   2. The application is now registered and can connect");
             info!("   3. Account data retrieval has been tested");
         }
-        Err(e) => {
+        Err(e) => {
             error!("❌ Connection and registration failed: {}", e);
             info!("💡 Troubleshooting tips:");
             info!("   1. Make sure QuickBooks Desktop is running");
