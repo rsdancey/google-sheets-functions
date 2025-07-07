@@ -154,8 +154,8 @@ impl QuickBooksClient {
         
         info!("Attempting to register application with QuickBooks...");
         
-        // Application details for registration
-        let app_id = "QuickBooks-Sheets-Sync-v1";
+        // Application details for registration. Use empty AppID for first connection.
+        let app_id = "";
         let app_name = "QuickBooks Sheets Sync";
         
         info!("About to call perform_complete_session_test...");
@@ -260,31 +260,34 @@ impl QuickBooksClient {
 
     #[cfg(windows)]
     fn try_open_connection(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
-        info!("Attempting OpenConnection with AppID: '{}', AppName: '{}'", app_id, app_name);
-        info!("💡 QuickBooks may show an authorization dialog - please approve it!");
+        info!("Opening Connection to QuickBooks");
+        info!("  AppID: '{}'", app_id);
+        info!("  AppName: '{}'", app_name);
         
-        // Method 1: Try OpenConnection2 with 2 parameters (most common pattern from C++ SDK)
-        info!("Method 1: Trying OpenConnection2 (2 parameters)...");
-        if let Ok(_) = self.call_open_connection2_basic(session_manager, app_id, app_name) {
-            info!("✅ OpenConnection2 successful (basic method)");
-            return Ok(());
+        let app_id_variant = self.create_string_variant(app_id)?;
+        let app_name_variant = self.create_string_variant(app_name)?;
+        
+        // Following C++ SDK exactly: OpenConnection2 with 2 parameters
+        info!("💡 If this is your first time, QuickBooks will show an authorization dialog");
+        match self.invoke_method(
+            session_manager,
+            "OpenConnection2",
+            &[&app_id_variant, &app_name_variant]
+        ) {
+            Ok(_) => {
+                info!("✅ Successfully opened connection to QuickBooks");
+                Ok(())
+            }
+            Err(e) => {
+                error!("❌ Failed to connect to QuickBooks");
+                error!("Make sure:");
+                error!("  1. QuickBooks is running and a company file is open");
+                error!("  2. No other applications are currently using QuickBooks");
+                error!("  3. You have administrator privileges");
+                error!("Error details: {}", e);
+                Err(anyhow::anyhow!("Failed to open QuickBooks connection: {}", e))
+            }
         }
-        
-        // Method 2: Try OpenConnection (traditional single parameter method)
-        info!("Method 2: Trying OpenConnection (1 parameter)...");
-        if let Ok(_) = self.call_open_connection(session_manager, app_id) {
-            info!("✅ OpenConnection successful (traditional method)");
-            return Ok(());
-        }
-        
-        // Method 3: Try OpenConnection2 with connection type parameter
-        info!("Method 3: Trying OpenConnection2 (3 parameters)...");
-        if let Ok(_) = self.call_open_connection2_with_type(session_manager, app_id, app_name) {
-            info!("✅ OpenConnection2 successful (with connection type)");
-            return Ok(());
-        }
-        
-        Err(anyhow::anyhow!("All OpenConnection methods failed. QuickBooks may need to authorize this application."))
     }
 
     #[cfg(windows)]

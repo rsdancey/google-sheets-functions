@@ -74,15 +74,15 @@ async fn main() -> Result<()> {
         .context("QuickBooks SDK test failed")?;
 
     // Test 2: Attempt to register with QuickBooks
-    info!("📋 Step 2: Attempting to register with QuickBooks...");
+    info!("📋 Step 2: Attempting to connect and register with QuickBooks...");
     match qb_client.register_with_quickbooks().await {
-        Ok(()) => {
-            info!("🎉 SUCCESS! Application has been registered with QuickBooks.");
+        Ok(()) => {
+            info!("🎉 SUCCESS! Application connected and registered with QuickBooks.");
             
             // Test 3: Test XML processing (account data retrieval)
-            info!("� Step 3: Testing XML processing (account data retrieval)...");
+            info!("🗒️ Step 3: Testing XML processing (account data retrieval)...");
             match qb_client.test_account_data_retrieval().await {
-                Ok(xml_response) => {
+                Ok(xml_response) => {
                     info!("✅ Account data retrieval successful!");
                     info!("📄 XML Response received ({} characters)", xml_response.len());
                     
@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
                         info!("📋 Full response: {}", xml_response);
                     }
                 }
-                Err(e) => {
+                Err(e) => {
                     error!("❌ Account data retrieval failed: {}", e);
                     info!("💡 This may be expected if:");
                     info!("   1. Company file has no accounts");
@@ -102,13 +102,13 @@ async fn main() -> Result<()> {
                 }
             }
             
-            info!("�📝 Next steps:");
+            info!("📝 Next steps:");
             info!("   1. QuickBooks should have shown an authorization dialog");
             info!("   2. The application is now registered and can connect");
             info!("   3. Account data retrieval has been tested");
         }
-        Err(e) => {
-            error!("❌ Registration failed: {}", e);
+        Err(e) => {
+            error!("❌ Connection and registration failed: {}", e);
             info!("💡 Troubleshooting tips:");
             info!("   1. Make sure QuickBooks Desktop is running");
             info!("   2. Make sure a company file is open");
@@ -116,7 +116,7 @@ async fn main() -> Result<()> {
             info!("   4. Try running QuickBooks as Administrator");
             return Err(e);
         }
-    }
+    };
 
     Ok(())
 }
