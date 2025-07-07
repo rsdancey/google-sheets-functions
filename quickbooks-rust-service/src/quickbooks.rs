@@ -318,11 +318,11 @@ impl QuickBooksClient {
     fn begin_session(&self, session_manager: &IDispatch, company_file: &str) -> Result<String> {
         // First try to get current company file if no file specified
         let effective_company_file = if company_file.is_empty() {
-            // First check connection type
-            match self.get_property(session_manager, "ConnectionType") {
-                Ok(conn_type) => {
-                    info!("Current connection type: {:?}", conn_type);
-                    match self.get_property(session_manager, "CurrentCompanyFileName") {
+            // Try to get the company file name through the Company property
+            match self.get_property(session_manager, "Company") {
+                Ok(company) => {
+                    info!("Got company object");
+                    match self.get_property(&company, "FileName") {
                         Ok(current_file) => {
                             match self.variant_to_string(&current_file) {
                                 Ok(file_path) => {
@@ -342,10 +342,8 @@ impl QuickBooksClient {
                     }
                 }
                 Err(e) => {
-                    info!("Failed to get connection type: {}", e);
-                    return Err(anyhow::anyhow!("Failed to get connection type: {}", e));
-                }
-                }
+                    info!("Failed to get Company object: {}", e);
+                    return Err(anyhow::anyhow!("Failed to get Company object: {}", e));
             } else {
             company_file.to_string()
         };
