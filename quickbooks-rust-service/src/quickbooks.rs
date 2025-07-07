@@ -88,13 +88,19 @@ impl QuickBooksClient {
             let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             if hr.is_err() {
                 // COM may already be initialized, which is fine
+                info!("COM already initialized or initialization failed");
+            } else {
+                info!("COM initialized successfully");
             }
         }
 
+        info!("About to call register_application...");
         let result = self.register_application();
+        info!("register_application returned: {:?}", result.is_ok());
 
         unsafe {
             CoUninitialize();
+            info!("COM uninitialized");
         }
 
         result
@@ -121,23 +127,9 @@ impl QuickBooksClient {
                 } {
                     info!("✅ Successfully created session manager: {}", class_name);
                     
-                    // Test the session manager functionality
-                    match self.test_session_manager(&session_manager) {
-                        Ok(_) => {
-                            info!("✅ Session manager functionality test passed!");
-                            return Ok(session_manager);
-                        }
-                        Err(e) => {
-                            error!("❌ Session manager functionality test failed: {}", e);
-                            info!("💡 This indicates the session manager object was created but is not functional");
-                            info!("💡 Common causes:");
-                            info!("   - QuickBooks Desktop is not running");
-                            info!("   - No company file is open in QuickBooks");
-                            info!("   - QuickBooks is not in a ready state");
-                            info!("   - Permission/security issues");
-                            continue; // Try next class
-                        }
-                    }
+                    // Skip preliminary functionality test - will test during actual connection
+                    info!("✅ Session manager created successfully, will test during connection");
+                    return Ok(session_manager);
                 }
             }
         }
@@ -148,7 +140,17 @@ impl QuickBooksClient {
     #[cfg(windows)]
     fn register_application(&self) -> Result<()> {
         info!("Creating QuickBooks session manager...");
-        let session_manager = self.create_session_manager()?;
+        
+        let session_manager = match self.create_session_manager() {
+            Ok(sm) => {
+                info!("Session manager created successfully");
+                sm
+            }
+            Err(e) => {
+                error!("Failed to create session manager: {}", e);
+                return Err(e);
+            }
+        };
         
         info!("Attempting to register application with QuickBooks...");
         
@@ -156,12 +158,26 @@ impl QuickBooksClient {
         let app_id = "QuickBooks-Sheets-Sync-v1";
         let app_name = "QuickBooks Sheets Sync";
         
+        info!("About to call perform_complete_session_test...");
+        
         // Follow the C++ SDK pattern: OpenConnection -> BeginSession -> EndSession -> CloseConnection
-        self.perform_complete_session_test(&session_manager, app_id, app_name)?;
-        
-        info!("✅ Successfully registered with QuickBooks!");
-        
-        Ok(())
+        match self.perform_complete_session_test(&session_manager, app_id, app_name) {
+            Ok(()) => {
+                info!("✅ Successfully registered with QuickBooks!");
+                Ok(())
+            }
+            Err(e) => {
+                error!("❌ Registration failed: {}", e);
+                info!("💡 Error details: {:?}", e);
+                
+                // Try to get more specific error information
+                if let Some(source) = e.source() {
+                    error!("Error source: {}", source);
+                }
+                
+                Err(e)
+            }
+        }
     }
 
     #[cfg(windows)]
@@ -169,14 +185,32 @@ impl QuickBooksClient {
         info!("Starting complete session test following C++ SDK pattern...");
         
         // Step 1: OpenConnection
-        self.try_open_connection(session_manager, app_id, app_name)?;
-        info!("✅ OpenConnection successful");
+        info!("Step 1: Attempting OpenConnection...");
+        match self.try_open_connection(session_manager, app_id, app_name) {
+            Ok(()) => {
+                info!("✅ OpenConnection successful");
+            }
+            Err(e) => {
+                error!("❌ OpenConnection failed: {}", e);
+                return Err(anyhow::anyhow!("OpenConnection failed: {}", e));
+            }
+        }
         
         // Step 2: BeginSession (with current company file)
-        let ticket = self.begin_session(session_manager, "")?; // Empty string means current company file
-        info!("✅ BeginSession successful, ticket: {:?}", ticket);
+        info!("Step 2: Attempting BeginSession...");
+        let ticket = match self.begin_session(session_manager, "") {
+            Ok(t) => {
+                info!("✅ BeginSession successful, ticket: {:?}", t);
+                t
+            }
+            Err(e) => {
+                error!("❌ BeginSession failed: {}", e);
+                return Err(anyhow::anyhow!("BeginSession failed: {}", e));
+            }
+        };
         
         // Step 3: Test getting company file name
+        info!("Step 3: Testing GetCurrentCompanyFileName...");
         match self.get_current_company_file_name(session_manager, &ticket) {
             Ok(company_name) => {
                 info!("✅ Current company file: {}", company_name);
@@ -187,15 +221,39 @@ impl QuickBooksClient {
         }
         
         // Step 4: Test version information
-        self.test_version_info(session_manager, &ticket)?;
+        info!("Step 4: Testing version information...");
+        match self.test_version_info(session_manager, &ticket) {
+            Ok(_) => {
+                info!("✅ Version information test successful");
+            }
+            Err(e) => {
+                info!("⚠️ Version information test failed: {}", e);
+            }
+        }
         
         // Step 5: EndSession
-        self.end_session(session_manager, &ticket)?;
-        info!("✅ EndSession successful");
+        info!("Step 5: Attempting EndSession...");
+        match self.end_session(session_manager, &ticket) {
+            Ok(()) => {
+                info!("✅ EndSession successful");
+            }
+            Err(e) => {
+                error!("❌ EndSession failed: {}", e);
+                // Don't return error here - try to close connection anyway
+            }
+        }
         
         // Step 6: CloseConnection
-        self.close_connection(session_manager)?;
-        info!("✅ CloseConnection successful");
+        info!("Step 6: Attempting CloseConnection...");
+        match self.close_connection(session_manager) {
+            Ok(()) => {
+                info!("✅ CloseConnection successful");
+            }
+            Err(e) => {
+                error!("❌ CloseConnection failed: {}", e);
+                // Don't return error here - connection might already be closed
+            }
+        }
         
         Ok(())
     }
@@ -203,20 +261,24 @@ impl QuickBooksClient {
     #[cfg(windows)]
     fn try_open_connection(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
         info!("Attempting OpenConnection with AppID: '{}', AppName: '{}'", app_id, app_name);
+        info!("💡 QuickBooks may show an authorization dialog - please approve it!");
         
         // Method 1: Try OpenConnection2 with 2 parameters (most common pattern from C++ SDK)
+        info!("Method 1: Trying OpenConnection2 (2 parameters)...");
         if let Ok(_) = self.call_open_connection2_basic(session_manager, app_id, app_name) {
             info!("✅ OpenConnection2 successful (basic method)");
             return Ok(());
         }
         
         // Method 2: Try OpenConnection (traditional single parameter method)
+        info!("Method 2: Trying OpenConnection (1 parameter)...");
         if let Ok(_) = self.call_open_connection(session_manager, app_id) {
             info!("✅ OpenConnection successful (traditional method)");
             return Ok(());
         }
         
         // Method 3: Try OpenConnection2 with connection type parameter
+        info!("Method 3: Trying OpenConnection2 (3 parameters)...");
         if let Ok(_) = self.call_open_connection2_with_type(session_manager, app_id, app_name) {
             info!("✅ OpenConnection2 successful (with connection type)");
             return Ok(());
@@ -230,19 +292,38 @@ impl QuickBooksClient {
         info!("Starting BeginSession with company file: '{}'", company_file);
         
         let company_file_variant = self.create_string_variant(company_file)?;
-        let file_open_mode = self.create_int_variant(0)?; // 0 = DoNotCare (from C++ SDK)
         
-        // BeginSession returns a ticket (session ID)
-        let result = self.invoke_method(
-            session_manager, 
-            "BeginSession", 
-            &[&company_file_variant, &file_open_mode]
-        )?;
+        // Try different file open modes for multi-user QuickBooks
+        let file_open_modes = [
+            (1, "MultiUser"),      // 1 = MultiUser mode
+            (0, "DoNotCare"),      // 0 = DoNotCare 
+            (2, "SingleUser"),     // 2 = SingleUser (might still work in multi-user)
+        ];
         
-        let ticket = self.variant_to_string(&result)?;
-        info!("BeginSession returned ticket: {}", ticket);
+        for &(mode, mode_name) in &file_open_modes {
+            info!("  Trying BeginSession with mode: {} ({})", mode, mode_name);
+            
+            let file_open_mode = self.create_int_variant(mode)?;
+            
+            // BeginSession returns a ticket (session ID)
+            match self.invoke_method(
+                session_manager, 
+                "BeginSession", 
+                &[&company_file_variant, &file_open_mode]
+            ) {
+                Ok(result) => {
+                    let ticket = self.variant_to_string(&result)?;
+                    info!("✅ BeginSession successful with mode {} ({}), ticket: {}", mode, mode_name, ticket);
+                    return Ok(ticket);
+                }
+                Err(e) => {
+                    info!("  ❌ BeginSession failed with mode {} ({}): {}", mode, mode_name, e);
+                    continue;
+                }
+            }
+        }
         
-        Ok(ticket)
+        Err(anyhow::anyhow!("BeginSession failed with all file open modes"))
     }
 
     #[cfg(windows)]
@@ -324,12 +405,24 @@ impl QuickBooksClient {
     #[cfg(windows)]
     fn call_open_connection2_basic(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
         info!("Trying OpenConnection2 (2 parameters)...");
+        info!("  AppID: '{}'", app_id);
+        info!("  AppName: '{}'", app_name);
         
         let app_id_variant = self.create_string_variant(app_id)?;
         let app_name_variant = self.create_string_variant(app_name)?;
         
-        self.invoke_method(session_manager, "OpenConnection2", &[&app_id_variant, &app_name_variant])
-            .map(|_| ())
+        info!("  About to call invoke_method with OpenConnection2...");
+        
+        match self.invoke_method(session_manager, "OpenConnection2", &[&app_id_variant, &app_name_variant]) {
+            Ok(_) => {
+                info!("  ✅ OpenConnection2 successful!");
+                Ok(())
+            }
+            Err(e) => {
+                error!("  ❌ OpenConnection2 failed: {}", e);
+                Err(e)
+            }
+        }
     }
 
     #[cfg(windows)]
@@ -532,19 +625,30 @@ impl QuickBooksClient {
 
     #[cfg(windows)]
     fn invoke_method(&self, dispatch: &IDispatch, method_name: &str, params: &[&VARIANT]) -> Result<VARIANT> {
+        info!("Invoking method: {} with {} parameters", method_name, params.len());
+        
         // Get method DISPID
         let method_name_bstr = BSTR::from(method_name);
         let names = [PCWSTR::from_raw(method_name_bstr.as_ptr())];
         let mut dispid = -1i32;
         
+        info!("Getting DISPID for method: {}", method_name);
         unsafe {
-            dispatch.GetIDsOfNames(
+            match dispatch.GetIDsOfNames(
                 &windows::core::GUID::zeroed(),
                 names.as_ptr(),
                 1,
                 0x0409, // LCID_ENGLISH_US
                 &mut dispid,
-            )?;
+            ) {
+                Ok(()) => {
+                    info!("Got DISPID {} for method {}", dispid, method_name);
+                }
+                Err(e) => {
+                    error!("Failed to get DISPID for method {}: {:?}", method_name, e);
+                    return Err(anyhow::anyhow!("Failed to get DISPID for method {}: {:?}", method_name, e));
+                }
+            }
         }
         
         // Prepare parameters (in reverse order for IDispatch)
@@ -556,13 +660,15 @@ impl QuickBooksClient {
             cNamedArgs: 0,
         };
         
+        info!("About to invoke method {} (DISPID: {})", method_name, dispid);
+        
         // Invoke the method
         let mut result = VARIANT::default();
         let mut excepinfo = EXCEPINFO::default();
         let mut arg_err = 0u32;
         
         unsafe {
-            dispatch.Invoke(
+            match dispatch.Invoke(
                 dispid,
                 &windows::core::GUID::zeroed(),
                 0x0409,
@@ -571,10 +677,25 @@ impl QuickBooksClient {
                 Some(&mut result),
                 Some(&mut excepinfo),
                 Some(&mut arg_err),
-            )?;
+            ) {
+                Ok(()) => {
+                    info!("Method {} invoked successfully", method_name);
+                    Ok(result)
+                }
+                Err(e) => {
+                    error!("Method {} invocation failed: {:?}", method_name, e);
+                    error!("Exception info: SCODE={:?}, arg_err={}", excepinfo.scode, arg_err);
+                    
+                    // Try to get more detailed error information
+                    if !excepinfo.bstrDescription.is_empty() {
+                        let desc = excepinfo.bstrDescription.to_string();
+                        error!("Exception description: {}", desc);
+                    }
+                    
+                    Err(anyhow::anyhow!("Method {} invocation failed: {:?}", method_name, e))
+                }
+            }
         }
-        
-        Ok(result)
     }
 
     // New method for processing XML requests (similar to C++ SDK ProcessRequest)
