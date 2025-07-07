@@ -13,7 +13,7 @@ use windows::{
 
 use crate::config::QuickBooksConfig;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct QuickBooksClient {
     config: QuickBooksConfig,
 }
@@ -55,17 +55,33 @@ impl QuickBooksClient {
     async fn test_sdk_availability(&self) -> Result<()> {
         info!("Testing QuickBooks SDK availability...");
         
+        // Initialize COM
         unsafe {
             let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            if hr.is_err() {
-                // COM may already be initialized, which is fine
+            match hr {
+                Ok(_) => info!("COM initialized successfully"),
+                Err(e) => {
+                    let code = e.code().0;
+                    // RPC_E_CHANGED_MODE = 0x80010106
+                    // S_FALSE = 0x00000001 (already initialized with same mode)
+                    if code == 0x80010106 || code == 0x00000001 {
+                        info!("COM already initialized in compatible mode");
+                    } else {
+                        error!("Failed to initialize COM: {:?}", e);
+                        return Err(anyhow::anyhow!("COM initialization failed: {:?}", e));
+                    }
+                }
             }
         }
 
         let result = self.create_session_manager();
 
+        // Uninitialize COM
+        // Note: It's safe to call CoUninitialize() if we successfully called CoInitializeEx,
+        // regardless of whether it returned S_OK or S_FALSE
         unsafe {
             CoUninitialize();
+            info!("COM uninitialized");
         }
 
         match result {
@@ -86,11 +102,19 @@ impl QuickBooksClient {
         
         unsafe {
             let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            if hr.is_err() {
-                // COM may already be initialized, which is fine
-                info!("COM already initialized or initialization failed");
-            } else {
-                info!("COM initialized successfully");
+            match hr {
+                Ok(_) => info!("COM initialized successfully"),
+                Err(e) => {
+                    let code = e.code().0;
+                    // RPC_E_CHANGED_MODE = 0x80010106
+                    // S_FALSE = 0x00000001 (already initialized with same mode)
+                    if code == 0x80010106 || code == 0x00000001 {
+                        info!("COM already initialized in compatible mode");
+                    } else {
+                        error!("Failed to initialize COM: {:?}", e);
+                        return Err(anyhow::anyhow!("COM initialization failed: {:?}", e));
+                    }
+                }
             }
         }
 
@@ -658,10 +682,13 @@ impl QuickBooksClient {
         let mut param_array: Vec<VARIANT> = params.iter().rev().map(|&p| p.clone()).collect();
         let dispparams = DISPPARAMS {
             rgvarg: if param_array.is_empty() { std::ptr::null_mut() } else { param_array.as_mut_ptr() },
-            cArgs: params.len() as u32,
+            cArgs: param_array.len() as u32,  // Use param_array.len() instead of params.len()
             rgdispidNamedArgs: std::ptr::null_mut(),
             cNamedArgs: 0,
         };
+        
+        // Keep param_array alive until after Invoke
+        let _param_guard = param_array;
         
         info!("About to invoke method {} (DISPID: {})", method_name, dispid);
         
@@ -670,17 +697,19 @@ impl QuickBooksClient {
         let mut excepinfo = EXCEPINFO::default();
         let mut arg_err = 0u32;
         
-        unsafe {
-            match dispatch.Invoke(
-                dispid,
-                &windows::core::GUID::zeroed(),
-                0x0409,
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &dispparams,
-                Some(&mut result),
-                Some(&mut excepinfo),
-                Some(&mut arg_err),
-            ) {
+            unsafe {
+                let invoke_result = dispatch.Invoke(
+                    dispid,
+                    &windows::core::GUID::zeroed(),
+                    0x0409,
+                    DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
+                    &dispparams,
+                    Some(&mut result),
+                    Some(&mut excepinfo),
+                    Some(&mut arg_err),
+                );
+                
+                match invoke_result {
                 Ok(()) => {
                     info!("Method {} invoked successfully", method_name);
                     Ok(result)
