@@ -322,7 +322,7 @@ impl QuickBooksClient {
             match self.get_property(session_manager, "Company") {
                 Ok(company) => {
                     info!("Got company object");
-                    let company_dispatch = unsafe { company.pdisp };
+                    let company_dispatch = self.variant_to_dispatch(&company)?;
                     if !company_dispatch.is_null() {
                         match self.get_property(company_dispatch, "FileName") {
                             Ok(current_file) => {
@@ -622,11 +622,14 @@ impl QuickBooksClient {
     #[cfg(windows)]
     fn variant_to_dispatch(&self, variant: &VARIANT) -> Result<IDispatch> {
         unsafe {
-            let dispatch = unsafe { variant.pdisp };
-            if !dispatch.is_null() {
-                Ok(dispatch)
+            if variant.vt.0 == (windows::Win32::System::Ole::VT_DISPATCH.0 as u16) {
+                if let Some(dispatch) = variant.pdispVal {
+                    Ok(dispatch)
+                } else {
+                    Err(anyhow::anyhow!("Failed to convert VARIANT to IDispatch: null dispatch pointer"))
+                }
             } else {
-                Err(anyhow::anyhow!("Failed to convert VARIANT to IDispatch"))
+                Err(anyhow::anyhow!("Failed to convert VARIANT to IDispatch: variant type is not VT_DISPATCH"))
             }
         }
     }
