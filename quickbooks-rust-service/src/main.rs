@@ -78,10 +78,34 @@ async fn main() -> Result<()> {
     match qb_client.register_with_quickbooks().await {
         Ok(()) => {
             info!("🎉 SUCCESS! Application has been registered with QuickBooks.");
-            info!("📝 Next steps:");
+            
+            // Test 3: Test XML processing (account data retrieval)
+            info!("� Step 3: Testing XML processing (account data retrieval)...");
+            match qb_client.test_account_data_retrieval().await {
+                Ok(xml_response) => {
+                    info!("✅ Account data retrieval successful!");
+                    info!("📄 XML Response received ({} characters)", xml_response.len());
+                    
+                    // Show first 500 characters of response for debugging
+                    if xml_response.len() > 500 {
+                        info!("📋 Response preview: {}...", &xml_response[..500]);
+                    } else {
+                        info!("📋 Full response: {}", xml_response);
+                    }
+                }
+                Err(e) => {
+                    error!("❌ Account data retrieval failed: {}", e);
+                    info!("💡 This may be expected if:");
+                    info!("   1. Company file has no accounts");
+                    info!("   2. Permissions are restricted");
+                    info!("   3. QBXML version incompatibility");
+                }
+            }
+            
+            info!("�📝 Next steps:");
             info!("   1. QuickBooks should have shown an authorization dialog");
             info!("   2. The application is now registered and can connect");
-            info!("   3. You can now implement account data retrieval");
+            info!("   3. Account data retrieval has been tested");
         }
         Err(e) => {
             error!("❌ Registration failed: {}", e);
@@ -98,9 +122,9 @@ async fn main() -> Result<()> {
 }
 
 fn print_help() {
-    println!("QuickBooks Sheets Sync - Clean Registration Test");
+    println!("QuickBooks Sheets Sync - Enhanced Registration and XML Processing Test");
     println!();
-    println!("This program tests basic QuickBooks Desktop integration and registration.");
+    println!("This program tests QuickBooks Desktop integration, registration, and XML processing.");
     println!();
     println!("USAGE:");
     println!("    cargo run [OPTIONS]");
@@ -119,5 +143,9 @@ fn print_help() {
     println!("WHAT THIS DOES:");
     println!("    1. Tests if QuickBooks SDK components are available");
     println!("    2. Attempts to register the application with QuickBooks");
-    println!("    3. Shows success/failure and next steps");
+    println!("    3. Tests XML processing with account data retrieval");
+    println!("    4. Shows success/failure and next steps");
+    println!();
+    println!("BASED ON:");
+    println!("    Official Intuit C++ SDK sample patterns (sdktest.cpp)");
 }

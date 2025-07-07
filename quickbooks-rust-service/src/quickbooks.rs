@@ -156,13 +156,46 @@ impl QuickBooksClient {
         let app_id = "QuickBooks-Sheets-Sync-v1";
         let app_name = "QuickBooks Sheets Sync";
         
-        // Try different OpenConnection methods
-        self.try_open_connection(&session_manager, app_id, app_name)?;
+        // Follow the C++ SDK pattern: OpenConnection -> BeginSession -> EndSession -> CloseConnection
+        self.perform_complete_session_test(&session_manager, app_id, app_name)?;
         
         info!("✅ Successfully registered with QuickBooks!");
         
-        // Clean up the connection
-        self.close_connection(&session_manager)?;
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn perform_complete_session_test(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
+        info!("Starting complete session test following C++ SDK pattern...");
+        
+        // Step 1: OpenConnection
+        self.try_open_connection(session_manager, app_id, app_name)?;
+        info!("✅ OpenConnection successful");
+        
+        // Step 2: BeginSession (with current company file)
+        let ticket = self.begin_session(session_manager, "")?; // Empty string means current company file
+        info!("✅ BeginSession successful, ticket: {:?}", ticket);
+        
+        // Step 3: Test getting company file name
+        match self.get_current_company_file_name(session_manager, &ticket) {
+            Ok(company_name) => {
+                info!("✅ Current company file: {}", company_name);
+            }
+            Err(e) => {
+                info!("⚠️ Could not get company file name: {}", e);
+            }
+        }
+        
+        // Step 4: Test version information
+        self.test_version_info(session_manager, &ticket)?;
+        
+        // Step 5: EndSession
+        self.end_session(session_manager, &ticket)?;
+        info!("✅ EndSession successful");
+        
+        // Step 6: CloseConnection
+        self.close_connection(session_manager)?;
+        info!("✅ CloseConnection successful");
         
         Ok(())
     }
@@ -171,15 +204,15 @@ impl QuickBooksClient {
     fn try_open_connection(&self, session_manager: &IDispatch, app_id: &str, app_name: &str) -> Result<()> {
         info!("Attempting OpenConnection with AppID: '{}', AppName: '{}'", app_id, app_name);
         
-        // Method 1: Try OpenConnection (traditional single parameter method)
-        if let Ok(_) = self.call_open_connection(session_manager, app_id) {
-            info!("✅ OpenConnection successful (traditional method)");
+        // Method 1: Try OpenConnection2 with 2 parameters (most common pattern from C++ SDK)
+        if let Ok(_) = self.call_open_connection2_basic(session_manager, app_id, app_name) {
+            info!("✅ OpenConnection2 successful (basic method)");
             return Ok(());
         }
         
-        // Method 2: Try OpenConnection2 with 2 parameters
-        if let Ok(_) = self.call_open_connection2_basic(session_manager, app_id, app_name) {
-            info!("✅ OpenConnection2 successful (basic method)");
+        // Method 2: Try OpenConnection (traditional single parameter method)
+        if let Ok(_) = self.call_open_connection(session_manager, app_id) {
+            info!("✅ OpenConnection successful (traditional method)");
             return Ok(());
         }
         
@@ -190,6 +223,92 @@ impl QuickBooksClient {
         }
         
         Err(anyhow::anyhow!("All OpenConnection methods failed. QuickBooks may need to authorize this application."))
+    }
+
+    #[cfg(windows)]
+    fn begin_session(&self, session_manager: &IDispatch, company_file: &str) -> Result<String> {
+        info!("Starting BeginSession with company file: '{}'", company_file);
+        
+        let company_file_variant = self.create_string_variant(company_file)?;
+        let file_open_mode = self.create_int_variant(0)?; // 0 = DoNotCare (from C++ SDK)
+        
+        // BeginSession returns a ticket (session ID)
+        let result = self.invoke_method(
+            session_manager, 
+            "BeginSession", 
+            &[&company_file_variant, &file_open_mode]
+        )?;
+        
+        let ticket = self.variant_to_string(&result)?;
+        info!("BeginSession returned ticket: {}", ticket);
+        
+        Ok(ticket)
+    }
+
+    #[cfg(windows)]
+    fn end_session(&self, session_manager: &IDispatch, ticket: &str) -> Result<()> {
+        info!("Ending session with ticket: {}", ticket);
+        
+        let ticket_variant = self.create_string_variant(ticket)?;
+        
+        self.invoke_method(session_manager, "EndSession", &[&ticket_variant])
+            .map(|_| ())
+    }
+
+    #[cfg(windows)]
+    fn get_current_company_file_name(&self, session_manager: &IDispatch, ticket: &str) -> Result<String> {
+        let ticket_variant = self.create_string_variant(ticket)?;
+        
+        let result = self.invoke_method(
+            session_manager, 
+            "GetCurrentCompanyFileName", 
+            &[&ticket_variant]
+        )?;
+        
+        self.variant_to_string(&result)
+    }
+
+    #[cfg(windows)]
+    fn test_version_info(&self, session_manager: &IDispatch, ticket: &str) -> Result<()> {
+        info!("Testing version information...");
+        
+        // Test basic version properties (similar to C++ SDK)
+        if let Ok(result) = self.get_property(session_manager, "MajorVersion") {
+            if let Ok(major) = self.variant_to_string(&result) {
+                info!("  Major Version: {}", major);
+            }
+        }
+        
+        if let Ok(result) = self.get_property(session_manager, "MinorVersion") {
+            if let Ok(minor) = self.variant_to_string(&result) {
+                info!("  Minor Version: {}", minor);
+            }
+        }
+        
+        if let Ok(result) = self.get_property(session_manager, "ReleaseLevel") {
+            if let Ok(release) = self.variant_to_string(&result) {
+                info!("  Release Level: {}", release);
+            }
+        }
+        
+        if let Ok(result) = self.get_property(session_manager, "ReleaseNumber") {
+            if let Ok(release_num) = self.variant_to_string(&result) {
+                info!("  Release Number: {}", release_num);
+            }
+        }
+        
+        // Test QBXMLVersionsForSession (similar to C++ SDK)
+        let ticket_variant = self.create_string_variant(ticket)?;
+        if let Ok(result) = self.invoke_method(
+            session_manager, 
+            "QBXMLVersionsForSession", 
+            &[&ticket_variant]
+        ) {
+            info!("  ✅ QBXMLVersionsForSession accessible");
+            // Note: Parsing SAFEARRAY in Rust is complex, so we just verify it's callable
+        }
+        
+        Ok(())
     }
 
     #[cfg(windows)]
@@ -456,5 +575,98 @@ impl QuickBooksClient {
         }
         
         Ok(result)
+    }
+
+    // New method for processing XML requests (similar to C++ SDK ProcessRequest)
+    #[cfg(windows)]
+    pub async fn process_xml_request(&self, xml_request: &str) -> Result<String> {
+        info!("Processing XML request...");
+        
+        unsafe {
+            let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            if hr.is_err() {
+                // COM may already be initialized, which is fine
+            }
+        }
+
+        let result = self.perform_xml_request(xml_request);
+
+        unsafe {
+            CoUninitialize();
+        }
+
+        result
+    }
+
+    #[cfg(windows)]
+    fn perform_xml_request(&self, xml_request: &str) -> Result<String> {
+        info!("Creating session manager for XML request...");
+        let session_manager = self.create_session_manager()?;
+        
+        let app_id = "QuickBooks-Sheets-Sync-v1";
+        let app_name = "QuickBooks Sheets Sync";
+        
+        // Follow the C++ SDK pattern: OpenConnection -> BeginSession -> ProcessRequest -> EndSession -> CloseConnection
+        
+        // Step 1: OpenConnection
+        self.try_open_connection(&session_manager, app_id, app_name)?;
+        info!("✅ OpenConnection successful");
+        
+        // Step 2: BeginSession
+        let ticket = self.begin_session(&session_manager, "")?; // Empty string means current company file
+        info!("✅ BeginSession successful");
+        
+        // Step 3: ProcessRequest (the main XML processing step)
+        let xml_response = self.process_request(&session_manager, &ticket, xml_request)?;
+        info!("✅ ProcessRequest successful");
+        
+        // Step 4: EndSession
+        self.end_session(&session_manager, &ticket)?;
+        info!("✅ EndSession successful");
+        
+        // Step 5: CloseConnection
+        self.close_connection(&session_manager)?;
+        info!("✅ CloseConnection successful");
+        
+        Ok(xml_response)
+    }
+
+    #[cfg(windows)]
+    fn process_request(&self, session_manager: &IDispatch, ticket: &str, xml_request: &str) -> Result<String> {
+        info!("Processing QBXML request...");
+        
+        let ticket_variant = self.create_string_variant(ticket)?;
+        let xml_request_variant = self.create_string_variant(xml_request)?;
+        
+        let result = self.invoke_method(
+            session_manager, 
+            "ProcessRequest", 
+            &[&ticket_variant, &xml_request_variant]
+        )?;
+        
+        let xml_response = self.variant_to_string(&result)?;
+        info!("Received XML response ({} characters)", xml_response.len());
+        
+        Ok(xml_response)
+    }
+
+    // Method to create a simple account query XML request
+    pub fn create_account_query_xml(&self) -> String {
+        r#"<?xml version="1.0" ?>
+<?qbxml version="8.0"?>
+<QBXML>
+   <QBXMLMsgsRq onError="stopOnError">
+      <AccountQueryRq requestID="1">
+      </AccountQueryRq>
+   </QBXMLMsgsRq>
+</QBXML>"#.to_string()
+    }
+
+    // Convenience method to test account data retrieval
+    pub async fn test_account_data_retrieval(&self) -> Result<String> {
+        let xml_request = self.create_account_query_xml();
+        info!("Testing account data retrieval with XML request...");
+        
+        self.process_xml_request(&xml_request).await
     }
 }
