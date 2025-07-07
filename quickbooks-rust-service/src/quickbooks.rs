@@ -63,11 +63,11 @@ impl QuickBooksClient {
                 info!("COM initialized successfully");
             } else if code == 1 { // S_FALSE - already initialized with same mode
                 info!("COM already initialized in compatible mode");
-            } else if code == 0x80010106 { // RPC_E_CHANGED_MODE
+            } else if code == (0x80010106u32 as i32) { // RPC_E_CHANGED_MODE
                 info!("COM already initialized in different mode");
             } else {
-                error!("Failed to initialize COM: HRESULT 0x{:08x}", code);
-                return Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code));
+                error!("Failed to initialize COM: HRESULT 0x{:08x}", code as u32);
+                return Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code as u32));
             }
         }
 
@@ -104,11 +104,11 @@ impl QuickBooksClient {
                 info!("COM initialized successfully");
             } else if code == 1 { // S_FALSE - already initialized with same mode
                 info!("COM already initialized in compatible mode");
-            } else if code == 0x80010106 { // RPC_E_CHANGED_MODE
+            } else if code == (0x80010106u32 as i32) { // RPC_E_CHANGED_MODE
                 info!("COM already initialized in different mode");
             } else {
-                error!("Failed to initialize COM: HRESULT 0x{:08x}", code);
-                return Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code));
+                error!("Failed to initialize COM: HRESULT 0x{:08x}", code as u32);
+                return Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code as u32));
             }
         }
 
