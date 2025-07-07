@@ -319,7 +319,8 @@ impl QuickBooksClient {
         // First try to get current company file if no file specified
         let effective_company_file = if company_file.is_empty() {
             let use_short_name = self.create_bool_variant(false)?;
-            match self.invoke_method(session_manager, "GetCurrentCompanyFileName", &[&use_short_name]) {
+            let empty_string = self.create_string_variant("")?;
+            match self.invoke_method(session_manager, "GetCurrentCompanyFileName", &[&use_short_name, &empty_string]) {
                 Ok(current_file) => {
                     match self.variant_to_string(&current_file) {
                         Ok(file_path) => {
