@@ -18,6 +18,46 @@ pub struct QuickBooksClient {
     config: QuickBooksConfig,
 }
 
+#[cfg(windows)]
+struct ComGuard;
+
+#[cfg(windows)]
+impl ComGuard {
+    fn new() -> Result<Self> {
+        unsafe {
+            let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            match hr.0 {
+                0 => { // S_OK
+                    info!("COM initialized successfully");
+                    Ok(ComGuard)
+                }
+                1 => { // S_FALSE - already initialized with same mode
+                    info!("COM already initialized in compatible mode");
+                    Ok(ComGuard)
+                }
+                code if code == 0x80010106u32 as i32 => { // RPC_E_CHANGED_MODE
+                    info!("COM already initialized in different mode");
+                    Ok(ComGuard)
+                }
+                code => {
+                    error!("Failed to initialize COM: HRESULT 0x{:08x}", code as u32);
+                    Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code as u32))
+                }
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ComGuard {
+    fn drop(&mut self) {
+        unsafe {
+            CoUninitialize();
+            info!("COM uninitialized");
+        }
+    }
+}
+
 impl QuickBooksClient {
     pub fn new(config: &QuickBooksConfig) -> Result<Self> {
         Ok(Self {
@@ -55,32 +95,12 @@ impl QuickBooksClient {
     async fn test_sdk_availability(&self) -> Result<()> {
         info!("Testing QuickBooks SDK availability...");
         
-        // Initialize COM
-        unsafe {
-            let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            let code = hr.0;
-            if code == 0 { // S_OK
-                info!("COM initialized successfully");
-            } else if code == 1 { // S_FALSE - already initialized with same mode
-                info!("COM already initialized in compatible mode");
-            } else if code == (0x80010106u32 as i32) { // RPC_E_CHANGED_MODE
-                info!("COM already initialized in different mode");
-            } else {
-                error!("Failed to initialize COM: HRESULT 0x{:08x}", code as u32);
-                return Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code as u32));
-            }
-        }
+        // Initialize COM with guard
+        let _com = ComGuard::new()?;
 
         let result = self.create_session_manager();
 
-        // Uninitialize COM
-        // Note: It's safe to call CoUninitialize() if we successfully called CoInitializeEx,
-        // regardless of whether it returned S_OK or S_FALSE
-        unsafe {
-            CoUninitialize();
-            info!("COM uninitialized");
-        }
-
+        // COM will be uninitialized when _com guard is dropped
         match result {
             Ok(_) => {
                 info!("✅ QuickBooks SDK is available");
@@ -97,30 +117,14 @@ impl QuickBooksClient {
     async fn perform_registration(&self) -> Result<()> {
         info!("Starting QuickBooks registration process...");
         
-        unsafe {
-            let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            let code = hr.0;
-            if code == 0 { // S_OK
-                info!("COM initialized successfully");
-            } else if code == 1 { // S_FALSE - already initialized with same mode
-                info!("COM already initialized in compatible mode");
-            } else if code == (0x80010106u32 as i32) { // RPC_E_CHANGED_MODE
-                info!("COM already initialized in different mode");
-            } else {
-                error!("Failed to initialize COM: HRESULT 0x{:08x}", code as u32);
-                return Err(anyhow::anyhow!("COM initialization failed: HRESULT 0x{:08x}", code as u32));
-            }
-        }
+        // Initialize COM with guard
+        let _com = ComGuard::new()?;
 
         info!("About to call register_application...");
         let result = self.register_application();
         info!("register_application returned: {:?}", result.is_ok());
 
-        unsafe {
-            CoUninitialize();
-            info!("COM uninitialized");
-        }
-
+        // COM will be uninitialized when _com guard is dropped
         result
     }
 
@@ -729,20 +733,10 @@ impl QuickBooksClient {
     pub async fn process_xml_request(&self, xml_request: &str) -> Result<String> {
         info!("Processing XML request...");
         
-        unsafe {
-            let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            if hr.is_err() {
-                // COM may already be initialized, which is fine
-            }
-        }
-
-        let result = self.perform_xml_request(xml_request);
-
-        unsafe {
-            CoUninitialize();
-        }
-
-        result
+        // Initialize COM with guard
+        let _com = ComGuard::new()?;
+        
+        self.perform_xml_request(xml_request)
     }
 
     #[cfg(windows)]
