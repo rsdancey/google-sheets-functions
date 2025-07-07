@@ -344,7 +344,9 @@ impl QuickBooksClient {
                 Err(e) => {
                     info!("Failed to get Company object: {}", e);
                     return Err(anyhow::anyhow!("Failed to get Company object: {}", e));
-            } else {
+                }
+            }
+        } else {
             company_file.to_string()
         };
 
