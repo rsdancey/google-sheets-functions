@@ -21,14 +21,21 @@ pub struct RequestProcessor2 {
 impl RequestProcessor2 {
     pub fn new() -> windows::core::Result<Self> {
         let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
+        log::debug!("Attempting to get CLSID for ProgID: {}", prog_id);
         let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
+        log::debug!("Got CLSID: {:?}", clsid);
+        log::debug!("Attempting to create COM instance with CLSCTX_LOCAL_SERVER");
         let dispatch: IDispatch = unsafe {
             CoCreateInstance::<Option<&IUnknown>, IDispatch>(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
-            )?
+            ).map_err(|e| {
+                log::error!("CoCreateInstance failed with error code: 0x{:08X}", e.code().0);
+                e
+            })?
         };
+        log::debug!("Successfully created COM instance");
 
         // Get all method IDs upfront
         let open_connection_id = Self::get_method_id(&dispatch, "OpenConnection")?;
