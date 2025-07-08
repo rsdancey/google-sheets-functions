@@ -45,7 +45,7 @@ impl Config {
 }
 
 fn print_instructions() {
-    println!("🔧 QuickBooks Desktop Integration Service");
+    println!("🔧 QuickBooks Desktop Integration Service v1");
     println!("==========================================");
     println!();
     println!("📋 Prerequisites before running this service:");
