@@ -157,7 +157,19 @@ impl QuickBooksClient {
                                     }
                                 }
                                 Err(e) => {
-                                    let msg = format!("Failed to create session manager with {}: 0x{:08X}", prog_id_str, e.code().0);
+                                    let code = e.code().0;
+                                    let msg = if code == 0x80040154 {
+                                        format!(
+                                            "Failed to create session manager with {} - COM class not registered (0x80040154). \
+                                            This usually means either:\n\
+                                            1. QuickBooks is not installed\n\
+                                            2. QuickBooks SDK is not installed\n\
+                                            3. The SDK components are not properly registered",
+                                            prog_id_str
+                                        )
+                                    } else {
+                                        format!("Failed to create session manager with {}: 0x{:08X}", prog_id_str, code)
+                                    };
                                     log::warn!("{}", msg);
                                     last_error = Some(msg);
                                 }
