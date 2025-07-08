@@ -300,28 +300,26 @@ impl RequestProcessor2 {
         Self::check_sdk_installation()?;
         Self::check_registry_paths()?;
 
-// Try the Interop-specific ProgID first
-let prog_id = HSTRING::from("Interop.QBXMLRP2");
-let clsid = unsafe { 
-    match CLSIDFromProgID(&prog_id) {
-        Ok(id) => id,
+// Try known CLSIDs
+let dispatch: IDispatch = unsafe {
+    let interop_clsid = GUID::from_values(
+        0x2CA96D00, 0xBB39, 0x4782,
+        [0xBA, 0x2B, 0x4C, 0x97, 0x4E, 0x51, 0x98, 0xF3]
+    );
+    log::debug!("Attempting with Interop CLSID");
+    match CoCreateInstance::<_, IDispatch>(&interop_clsid, None, CLSCTX_ALL | CLSCTX_LOCAL_SERVER) {
+        Ok(dispatch) => {
+            log::debug!("Successfully created Interop COM instance");
+            dispatch
+        },
         Err(_) => {
-            // Fall back to the standard ProgID
-            log::debug!("Falling back to standard QBXMLRP2.RequestProcessor.2");
+            log::debug!("Falling back to standard ProgID");
             let fallback_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
-            CLSIDFromProgID(&fallback_id)?
+            let fallback_clsid = CLSIDFromProgID(&fallback_id)?;
+            CoCreateInstance(&fallback_clsid, None, CLSCTX_ALL | CLSCTX_LOCAL_SERVER)?
         }
     }
 };
-
-        // Create the COM object
-        let dispatch: IDispatch = unsafe {
-            CoCreateInstance(
-                &clsid,
-                None,
-                CLSCTX_ALL | CLSCTX_LOCAL_SERVER
-            )?
-        };
         log::debug!("Successfully created COM instance");
 
         // Get all method IDs upfront
