@@ -108,7 +108,7 @@ impl QuickBooksClient {
             };
 
             // Create instance of Request Processor
-            let request_processor = match CoCreateInstance::<Option<&IUnknown>, IRequestProcessor2>(&clsid, None, CLSCTX_ALL) {
+            let request_processor = match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
                 Ok(rp) => {
                     self.request_processor = Some(rp.clone());
                     rp
