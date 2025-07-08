@@ -272,7 +272,6 @@ impl Drop for QuickBooksClient {
                     params.rgvarg = args.as_mut_ptr();
                     params.cArgs = args.len() as u32;
 
-                    let mut result = VARIANT::default();
                     let mut exc_info = EXCEPINFO::default();
                     let mut arg_err = 0u32;
 

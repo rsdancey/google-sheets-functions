@@ -13,8 +13,7 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct QuickBooksConfig {
-    app_id: String,
-    app_name: String,
+    pub app_name: String,
 }
 
 #[derive(Debug, Clone)]
