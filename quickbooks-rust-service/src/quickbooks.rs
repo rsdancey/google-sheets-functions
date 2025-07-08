@@ -125,14 +125,10 @@ impl QuickBooksClient {
             log::debug!("Opening connection");
             log::debug!("COM array for OpenConnection: [0]=BSTR('{}'), [1]=BSTR('')", self.config.app_name);
             let mut params = DISPPARAMS::default();
-            // NOTE: For COM calls using DISPPARAMS, parameters must be in reverse order from the C++ sample
             let mut args = vec![
-                create_bstr_variant(""),                    // appID (first parameter)
-                create_bstr_variant(&self.config.app_name),  // appName (second parameter)
+                create_bstr_variant(""), // appID (first parameter)
+                create_bstr_variant(&self.config.app_name), // appName (second parameter)
             ];
-            for (i, arg) in args.iter().enumerate() {
-                log::debug!("OpenConnection arg {}: BSTR", i);
-            }
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
 
