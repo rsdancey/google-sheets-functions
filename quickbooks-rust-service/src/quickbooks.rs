@@ -1,8 +1,8 @@
 use anyhow::{Result, anyhow};
 use std::mem::ManuallyDrop;
 use std::ptr;
-use windows_core::{BSTR, HSTRING, IUnknown};
-use windows::core::{PCWSTR, PCSTR};
+use windows_core::{BSTR, GUID, HSTRING};
+use windows::core::{PCWSTR, PCSTR, IUnknown};
 use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
     CoCreateInstance, CLSCTX_LOCAL_SERVER, CLSIDFromProgID,
@@ -117,7 +117,7 @@ impl QuickBooksClient {
                     match CLSIDFromProgID(&prog_id) {
                         Ok(clsid) => {
                             log::debug!("Got CLSID for {}", prog_id_str);
-                            match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
+                            match CoCreateInstance(&clsid, None, CLSCTX_LOCAL_SERVER) {
                                 Ok(session_manager) => {
                                     log::debug!("Created session manager with {}", prog_id_str);
                                     
@@ -201,7 +201,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(
+            let session_manager: IDispatch = CoCreateInstance(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -235,7 +235,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(
+            let session_manager: IDispatch = CoCreateInstance(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -270,7 +270,7 @@ impl QuickBooksClient {
                 let clsid = CLSIDFromProgID(&prog_id)
                     .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-                let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(
+                let session_manager: IDispatch = CoCreateInstance(
                     &clsid,
                     None,
                     CLSCTX_LOCAL_SERVER
