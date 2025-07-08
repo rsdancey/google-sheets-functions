@@ -41,6 +41,64 @@ impl RequestProcessor2 {
                 }
             }
 
+            // Check SDK 16.0 installation paths
+            let sdk_paths = [
+                r"SOFTWARE\Intuit\QBSDK16.0",
+                r"SOFTWARE\WOW6432Node\Intuit\QBSDK16.0",
+                r"SOFTWARE\Intuit\QuickBooks\QBSDKComponentRegister",
+                r"SOFTWARE\WOW6432Node\Intuit\QuickBooks\QBSDKComponentRegister",
+            ];
+
+            for path in sdk_paths.iter() {
+                let mut key = HKEY::default();
+                match RegOpenKeyExA(
+                    HKEY_LOCAL_MACHINE,
+                    PCSTR::from_raw(path.as_bytes().as_ptr() as *const u8),
+                    0,
+                    KEY_READ,
+                    &mut key
+                ) {
+                    Ok(_) => {
+                        log::info!("Found SDK path: {}", path);
+                        let mut buf = [0u8; 260];
+                        let mut size = buf.len() as u32;
+                        
+                        // Check for installation path
+                        if RegQueryValueExA(
+                            key,
+                            PCSTR::from_raw(b"InstallPath\0".as_ptr()),
+                            None,
+                            None,
+                            Some(buf.as_mut_ptr() as *mut u8),
+                            Some(&mut size),
+                        ).is_ok() {
+                            if let Ok(install_path) = String::from_utf8(buf[..size as usize].to_vec()) {
+                                log::info!("SDK Install Path: {}", install_path.trim_end_matches('\0'));
+                            }
+                        }
+                        
+                        // Check for version info
+                        if RegQueryValueExA(
+                            key,
+                            PCSTR::from_raw(b"Version\0".as_ptr()),
+                            None,
+                            None,
+                            Some(buf.as_mut_ptr() as *mut u8),
+                            Some(&mut size),
+                        ).is_ok() {
+                            if let Ok(version) = String::from_utf8(buf[..size as usize].to_vec()) {
+                                log::info!("SDK Version: {}", version.trim_end_matches('\0'));
+                            }
+                        }
+                        
+                        let _ = RegCloseKey(key);
+                    },
+                    Err(e) => {
+                        log::warn!("SDK path not found: {} (error: 0x{:08X})", path, e.code().0);
+                    }
+                }
+            }
+
             // Check if SDK is registered in Add/Remove Programs
             let mut hklm = HKEY::default();
             let _ = RegOpenKeyExA(
