@@ -5,7 +5,7 @@ use windows_core::{BSTR, HSTRING, IUnknown};
 use windows::core::{PCWSTR, PCSTR};
 use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
-    CoCreateInstance, CLSCTX_LOCAL_SERVER, CLSIDFromProgID,
+    CoCreateInstance, CLSCTX_ALL, CLSIDFromProgID,
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
 use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegOpenKeyExA, RegCloseKey};
@@ -117,7 +117,7 @@ impl QuickBooksClient {
                     match CLSIDFromProgID(&prog_id) {
                         Ok(clsid) => {
                             log::debug!("Got CLSID for {}", prog_id_str);
-                            match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
+                            match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
                                 Ok(session_manager) => {
                                     log::debug!("Created session manager with {}", prog_id_str);
                                     
@@ -157,7 +157,19 @@ impl QuickBooksClient {
                                     }
                                 }
                                 Err(e) => {
-                                    let msg = format!("Failed to create session manager with {}: 0x{:08X}", prog_id_str, e.code().0);
+                                    let code = e.code().0;
+                                    let msg = if code == -2147221164i32 {
+                                        format!(
+                                            "Failed to create session manager with {} - COM class not registered (0x80040154). \
+                                            This usually means either:\n\
+                                            1. QuickBooks is not installed\n\
+                                            2. QuickBooks SDK is not installed\n\
+                                            3. The SDK components are not properly registered",
+                                            prog_id_str
+                                        )
+                                    } else {
+                                        format!("Failed to create session manager with {}: 0x{:08X}", prog_id_str, code)
+                                    };
                                     log::warn!("{}", msg);
                                     last_error = Some(msg);
                                 }
@@ -189,7 +201,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER)
+            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL)
                 .map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
             let mut params = DISPPARAMS::default();
@@ -220,7 +232,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER)
+            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL)
                 .map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
             let mut params = DISPPARAMS::default();
@@ -252,7 +264,7 @@ impl QuickBooksClient {
                 let clsid = CLSIDFromProgID(&prog_id)
                     .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-                let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER)
+                let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL)
                     .map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
                 let mut params = DISPPARAMS::default();
