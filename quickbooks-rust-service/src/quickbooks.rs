@@ -95,19 +95,19 @@ impl QuickBooksClient {
                 }
             };
 
-            // Try to create Session Manager
-            let session_manager_id = "QBSessionManager16";
+            // Try to create Request Processor
+            let request_processor_id = "QBXMLRPLib.RequestProcessor";
             log::debug!("Attempting to create Session Manager");
 
-            // Check registry for Session Manager
+            // Check registry for Request Processor
             let mut hkey = HKEY::default();
-            let key_path = format!("SOFTWARE\\Classes\\{}\\CLSID", session_manager_id) + "\0";
+            let key_path = format!("SOFTWARE\\Classes\\{}\\CLSID", request_processor_id) + "\0";
             let result = RegOpenKeyExA(
                 HKEY_LOCAL_MACHINE,
                 PCSTR(key_path.as_ptr()),
                 0,
                 KEY_READ,
-                &mut hkey
+                mut hkey
             );
 
             if result.is_err() {
@@ -118,22 +118,22 @@ impl QuickBooksClient {
             }
             let _ = RegCloseKey(hkey);
 
-            // Create Session Manager
-            let prog_id = HSTRING::from(session_manager_id);
+            // Create Request Processor
+            let prog_id = HSTRING::from(request_processor_id);
             let clsid = match CLSIDFromProgID(&prog_id) {
                 Ok(clsid) => clsid,
                 Err(e) => {
-                    let msg = format!("Failed to get CLSID for Session Manager: 0x{:08X}", e.code().0);
+                    let msg = format!("Failed to get CLSID for Request Processor: 0x{:08X}", e.code().0);
                     log::error!("{}", msg);
                     CoUninitialize();
                     return Err(anyhow!(msg));
                 }
             };
 
-            let session_manager = match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
-                Ok(sm) => {
-                    self.session_manager = Some(sm.clone());
-                    sm
+            let request_processor = match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
+                Ok(rp) => {
+                    self.request_processor = Some(rp.clone());
+                    rp
                 },
                 Err(e) => {
                     let code = e.code().0;
@@ -154,80 +154,35 @@ impl QuickBooksClient {
                 }
             };
 
-            // Now get the Request Processor from the Session Manager
+            // Open connection using the Request Processor
             let mut params = DISPPARAMS::default();
+            let mut args = vec![
+                create_bstr_variant(&self.config.app_id),
+                create_bstr_variant(&self.config.app_name),
+            ];
+            params.rgvarg = args.as_mut_ptr();
+            params.cArgs = args.len() as u32;
+
             let mut result = VARIANT::default();
             let mut exc_info = EXCEPINFO::default();
-            let mut arg_err = 0u32;
+            let mut arg_err = 0;
 
-            // Get Request Processor from Session Manager
-            match session_manager.Invoke(
-                1,  // DISPID for GetRequestProcessor
-                &Default::default(),
+            match request_processor.Invoke(
+                1,  // DISPID for OpenConnection2
+                Default::default(),
                 0,
                 DISPATCH_METHOD,
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err),
+                mut params,
+                Some(mut result),
+                Some(mut exc_info),
+                Some(mut arg_err),
             ) {
                 Ok(_) => {
-                    // Convert VARIANT to IDispatch for Request Processor
-                    let var_union_ptr = ptr::addr_of!(result.Anonymous);
-                    let var_union2_ptr = ptr::addr_of!((*var_union_ptr).Anonymous);
-                    let var_union3_ptr = ptr::addr_of!((*var_union2_ptr).Anonymous);
-                    let dispatch = ManuallyDrop::into_inner((*var_union3_ptr).pdispVal.clone());
-                    let request_processor = match dispatch {
-                        Some(disp) => {
-                            self.request_processor = Some(disp.clone());
-                            disp
-                        },
-                        None => {
-                            let msg = "Failed to get Request Processor from Session Manager: null pointer";
-                            log::error!("{}", msg);
-                            CoUninitialize();
-                            return Err(anyhow!(msg));
-                        }
-                    };
-
-                    // Set up connection parameters for the Request Processor
-                    let mut params = DISPPARAMS::default();
-                    let mut args = vec![
-                        create_bstr_variant(&self.config.app_id),
-                        create_bstr_variant(&self.config.app_name),
-                    ];
-                    params.rgvarg = args.as_mut_ptr();
-                    params.cArgs = args.len() as u32;
-
-                    let mut result = VARIANT::default();
-                    let mut exc_info = EXCEPINFO::default();
-                    let mut arg_err = 0u32;
-
-                    // Open connection using the Request Processor
-                    match request_processor.Invoke(
-                        1,  // DISPID for OpenConnection2
-                        &Default::default(),
-                        0,
-                        DISPATCH_METHOD,
-                        &mut params,
-                        Some(&mut result),
-                        Some(&mut exc_info),
-                        Some(&mut arg_err),
-                    ) {
-                        Ok(_) => {
-                            log::debug!("Successfully connected to QuickBooks");
-                            Ok(())
-                        }
-                        Err(e) => {
-                            let msg = format!("Failed to open connection: {:?}", e);
-                            log::error!("{}", msg);
-                            CoUninitialize();
-                            Err(anyhow!(msg))
-                        }
-                    }
+                    log::debug!("Successfully connected to QuickBooks");
+                    Ok(())
                 }
                 Err(e) => {
-                    let msg = format!("Failed to get Request Processor: {:?}", e);
+                    let msg = format!("Failed to open connection: {:?}", e);
                     log::error!("{}", msg);
                     CoUninitialize();
                     Err(anyhow!(msg))
@@ -236,35 +191,78 @@ impl QuickBooksClient {
         }
     }
 
-    pub fn begin_session(&mut self) -> Result<()> {
+    pub fn begin_session(&mut self, qb_file: &str) -> Result<()> {
         unsafe {
             log::debug!("Starting QuickBooks session");
-            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
-            let clsid = CLSIDFromProgID(&prog_id)
-                .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
+            
+            if let Some(request_processor) = &self.request_processor {
+                let mut params = DISPPARAMS::default();
+                let mut args = vec![
+                    create_bstr_variant(qb_file),
+                    create_bstr_variant(&QBXMLRPLib::qbFileOpenDoNotCare.to_string()),  // Using DoNotCare mode
+                ];
+                params.rgvarg = args.as_mut_ptr();
+                params.cArgs = args.len() as u32;
 
-            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL)
-                .map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
+                let mut result = VARIANT::default();
+                let mut exc_info = EXCEPINFO::default();
+                let mut arg_err = 0u32;
 
-            let mut params = DISPPARAMS::default();
-            let mut result = VARIANT::default();
-            let mut exc_info = EXCEPINFO::default();
-            let mut arg_err = 0u32;
+                // Begin session
+                match request_processor.Invoke(
+                    2,  // DISPID for BeginSession
+                    &Default::default(),
+                    0,
+                    DISPATCH_METHOD,
+                    &mut params,
+                    Some(&mut result),
+                    Some(&mut exc_info),
+                    Some(&mut arg_err),
+                ) {
+                    Ok(_) => {
+                        let ticket = variant_to_string(&result)?;
+                        self.session_ticket = Some(ticket);
 
-            session_manager.Invoke(
-                2,  // DISPID for BeginSession
-                &Default::default(),  // GUID for IID_NULL
-                0,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_METHOD,
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err),
-            ).map_err(|e| anyhow!("Failed to begin session: {:?}", e))?;
+                        // Get company file name (optional but useful for debugging)
+                        let mut params = DISPPARAMS::default();
+                        if let Some(ticket) = &self.session_ticket {
+                            let mut args = vec![create_bstr_variant(ticket)];
+                            params.rgvarg = args.as_mut_ptr();
+                            params.cArgs = args.len() as u32;
 
-            let ticket = variant_to_string(&result)?;
-            self.session_ticket = Some(ticket);
-            Ok(())
+                            let mut result = VARIANT::default();
+                            match request_processor.Invoke(
+                                3,  // DISPID for GetCurrentCompanyFileName
+                                &Default::default(),
+                                0,
+                                DISPATCH_METHOD,
+                                &mut params,
+                                Some(&mut result),
+                                Some(&mut exc_info),
+                                Some(&mut arg_err),
+                            ) {
+                                Ok(_) => {
+                                    if let Ok(company_file) = variant_to_string(&result) {
+                                        log::debug!("Connected to company file: {}", company_file);
+                                        self.company_file = Some(company_file);
+                                    }
+                                }
+                                Err(e) => {
+                                    log::warn!("Could not get company file name: {:?}", e);
+                                }
+                            }
+                        }
+                        Ok(())
+                    }
+                    Err(e) => {
+                        let msg = format!("Failed to begin session: {:?}", e);
+                        log::error!("{}", msg);
+                        Err(anyhow!(msg))
+                    }
+                }
+            } else {
+                Err(anyhow!("Request Processor not initialized. Call connect() first."))
+            }
         }
     }
 
