@@ -86,7 +86,6 @@ impl QuickBooksClient {
                 }
             };
 
-            // Get CLSID with detailed error handling
             // Try different ProgIDs
             let prog_ids = [
                 "QBXMLRP2.RequestProcessor",
@@ -95,126 +94,96 @@ impl QuickBooksClient {
                 "QBXMLRPLib.RequestProcessor.1"
             ];
 
-            // Check registry for each ProgID
+            // Try each ProgID until one works
+            let mut last_error = None;
             for prog_id_str in prog_ids {
                 log::debug!("Checking registry for ProgID: {}", prog_id_str);
                 
                 let mut hkey = HKEY::default();
-                let key_path = format!("SOFTWARE\\Classes\\{}\\CLSID", prog_id_str);
-                let key_path = key_path.to_string() + "\0";
-                let result = unsafe {
-                    RegOpenKeyExA(
-                        HKEY_LOCAL_MACHINE,
-                        PCSTR(key_path.as_ptr()),
-                        0,
-                        KEY_READ.0,
-                        &mut hkey
-                    )
-                };
+                let key_path = format!("SOFTWARE\\Classes\\{}\\CLSID", prog_id_str) + "\0";
+                let result = RegOpenKeyExA(
+                    HKEY_LOCAL_MACHINE,
+                    PCSTR(key_path.as_ptr()),
+                    0,
+                    KEY_READ.0,
+                    &mut hkey
+                );
 
                 if result.is_ok() {
                     log::debug!("Found registry entry for {}", prog_id_str);
-                    unsafe { RegCloseKey(hkey); }
+                    RegCloseKey(hkey);
+
+                    // Try to create COM object with this ProgID
+                    let prog_id = HSTRING::from(prog_id_str);
+                    match CLSIDFromProgID(&prog_id) {
+                        Ok(clsid) => {
+                            log::debug!("Got CLSID for {}", prog_id_str);
+                            match CoCreateInstance::<IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
+                                Ok(session_manager) => {
+                                    log::debug!("Created session manager with {}", prog_id_str);
+                                    
+                                    // Set up connection parameters
+                                    let mut params = DISPPARAMS::default();
+                                    let mut args = vec![
+                                        create_bstr_variant(&self.config.app_id),
+                                        create_bstr_variant(&self.config.app_name),
+                                    ];
+                                    params.rgvarg = args.as_mut_ptr();
+                                    params.cArgs = args.len() as u32;
+
+                                    let mut result = VARIANT::default();
+                                    let mut exc_info = EXCEPINFO::default();
+                                    let mut arg_err = 0u32;
+
+                                    // Try to open connection
+                                    match session_manager.Invoke(
+                                        1,  // DISPID for OpenConnection2
+                                        &Default::default(),
+                                        0,
+                                        DISPATCH_METHOD,
+                                        &mut params,
+                                        Some(&mut result),
+                                        Some(&mut exc_info),
+                                        Some(&mut arg_err),
+                                    ) {
+                                        Ok(_) => {
+                                            log::debug!("Successfully connected using {}", prog_id_str);
+                                            return Ok(());
+                                        }
+                                        Err(e) => {
+                                            let msg = format!("Failed to open connection with {}: {:?}", prog_id_str, e);
+                                            log::warn!("{}", msg);
+                                            last_error = Some(msg);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    let msg = format!("Failed to create session manager with {}: 0x{:08X}", prog_id_str, e.code().0);
+                                    log::warn!("{}", msg);
+                                    last_error = Some(msg);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let msg = format!("Failed to get CLSID for {}: 0x{:08X}", prog_id_str, e.code().0);
+                            log::warn!("{}", msg);
+                            last_error = Some(msg);
+                        }
+                    }
                 } else {
                     log::debug!("No registry entry found for {}", prog_id_str);
-                    continue;
                 }
+            }
 
-                let prog_id = HSTRING::from(prog_id_str);
-            let clsid = match CLSIDFromProgID(&prog_id) {
-                Ok(id) => id,
-                Err(e) => {
-                    let error_msg = format!(
-                        "Failed to get CLSID for QBXMLRP2.RequestProcessor.1. Error: 0x{:08X}. \
-                        This usually means the QuickBooks SDK is not properly installed or registered.",
-                        e.code().0
-                    );
-                    log::error!("{}", error_msg);
-                    CoUninitialize();
-                    return Err(anyhow!(error_msg));
-                }
-            };
-
-            // Create instance with detailed error handling
-            let session_manager: IDispatch = match CoCreateInstance(
-                &clsid,
-                None,
-                CLSCTX_LOCAL_SERVER
-            ) {
-                Ok(instance) => instance,
-                Err(e) => {
-                    let error_msg = format!(
-                        "Failed to create QuickBooks session manager. Error: 0x{:08X}. \
-                        This could mean QuickBooks is not running or the SDK components are not registered.",
-                        e.code().0
-                    );
-                    log::error!("{}", error_msg);
-                    CoUninitialize();
-                    return Err(anyhow!(error_msg));
-                }
-            };
-            CoInitializeEx(None, COINIT_MULTITHREADED)
-                .map_err(|e| anyhow!("Failed to initialize COM: {:?}", e))?;
-
-            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
-            let clsid = match CLSIDFromProgID(&prog_id) {
-                Ok(id) => id,
-                Err(e) => {
-                    let error_msg = format!(
-                        "Failed to get CLSID for session initialization. Error: 0x{:08X}. \
-                        The QuickBooks SDK components may not be properly registered.",
-                        e.code().0
-                    );
-                    log::error!("{}", error_msg);
-                    return Err(anyhow!(error_msg));
-                }
-            };
-
-            let session_manager: IDispatch = match CoCreateInstance(
-                &clsid,
-                None,
-                CLSCTX_LOCAL_SERVER
-            ) {
-                Ok(instance) => instance,
-                Err(e) => {
-                    let error_msg = format!(
-                        "Failed to create session manager for BeginSession. Error: 0x{:08X}. \
-                        Check if QuickBooks is running and accessible.",
-                        e.code().0
-                    );
-                    log::error!("{}", error_msg);
-                    return Err(anyhow!(error_msg));
-                }
-            };
-
-            let mut params = DISPPARAMS::default();
-            let mut args = vec![
-                create_bstr_variant(&self.config.app_id),
-                create_bstr_variant(&self.config.app_name),
-            ];
-            params.rgvarg = args.as_mut_ptr();
-            params.cArgs = args.len() as u32;
-
-            let mut result = VARIANT::default();
-            let mut exc_info = EXCEPINFO::default();
-            let mut arg_err = 0u32;
-
-            session_manager.Invoke(
-                1,  // DISPID for OpenConnection2
-                &Default::default(),  // GUID for IID_NULL
-                0,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_METHOD,
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err),
-            ).map_err(|e| anyhow!("Failed to open connection: {:?}", e))?;
-
-            Ok(())
+            // If we get here, none of the ProgIDs worked
+            CoUninitialize();
+            Err(anyhow!(last_error.unwrap_or_else(|| 
+                "Failed to connect with any known QuickBooks SDK components".to_string()
+            )))
         }
     }
 
-pub fn begin_session(&mut self) -> Result<()> {
+    pub fn begin_session(&mut self) -> Result<()> {
         unsafe {
             log::debug!("Starting QuickBooks session");
             let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
@@ -350,15 +319,11 @@ fn create_bstr_variant(s: &str) -> VARIANT {
         let mut variant = VARIANT::default();
         let bstr = ManuallyDrop::new(BSTR::from(s));
         
-        // Get raw pointers to the union fields and write values
         let var_union_ptr = ptr::addr_of_mut!(variant.Anonymous);
         let var_union2_ptr = ptr::addr_of_mut!((*var_union_ptr).Anonymous);
         let var_union3_ptr = ptr::addr_of_mut!((*var_union2_ptr).Anonymous);
         
-        // Write the variant type
         ptr::write(ptr::addr_of_mut!((*var_union2_ptr).vt), VARENUM(VT_BSTR.0));
-        
-        // Write the BSTR value
         ptr::write(ptr::addr_of_mut!((*var_union3_ptr).bstrVal), bstr);
         
         variant
