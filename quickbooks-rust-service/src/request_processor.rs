@@ -1,6 +1,7 @@
 use windows::core::{HSTRING, IUnknown, PCWSTR};
 use windows::Win32::System::Com::{
-    CLSIDFromProgID, CoCreateInstance, CLSCTX_LOCAL_SERVER,
+    CLSIDFromProgID, CoCreateInstance,
+    CLSCTX_LOCAL_SERVER, CLSCTX_INPROC_SERVER, CLSCTX_ALL,
     IDispatch, DISPATCH_METHOD, EXCEPINFO,
 };
 use windows::Win32::System::Variant::VARIANT;
@@ -24,17 +25,38 @@ impl RequestProcessor2 {
         log::debug!("Attempting to get CLSID for ProgID: {}", prog_id);
         let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
         log::debug!("Got CLSID: {:?}", clsid);
-        log::debug!("Attempting to create COM instance with CLSCTX_LOCAL_SERVER");
-        let dispatch: IDispatch = unsafe {
-            CoCreateInstance::<Option<&IUnknown>, IDispatch>(
-                &clsid,
-                None,
-                CLSCTX_LOCAL_SERVER
-            ).map_err(|e| {
-                log::error!("CoCreateInstance failed with error code: 0x{:08X}", e.code().0);
-                e
-            })?
-        };
+        // Try different server types
+        let server_types = [
+            (CLSCTX_LOCAL_SERVER, "CLSCTX_LOCAL_SERVER"),
+            (CLSCTX_INPROC_SERVER, "CLSCTX_INPROC_SERVER"),
+            (CLSCTX_ALL, "CLSCTX_ALL"),
+        ];
+
+        let mut last_error = None;
+        let mut dispatch = None;
+
+        for (server_type, type_name) in server_types.iter() {
+            log::debug!("Attempting to create COM instance with {}", type_name);
+            match unsafe {
+                CoCreateInstance::<Option<&IUnknown>, IDispatch>(
+                    &clsid,
+                    None,
+                    *server_type
+                )
+            } {
+                Ok(disp) => {
+                    log::debug!("Successfully created COM instance with {}", type_name);
+                    dispatch = Some(disp);
+                    break;
+                }
+                Err(e) => {
+                    log::error!("CoCreateInstance with {} failed with error code: 0x{:08X}", type_name, e.code().0);
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        let dispatch = dispatch.ok_or_else(|| last_error.unwrap())?;
         log::debug!("Successfully created COM instance");
 
         // Get all method IDs upfront
