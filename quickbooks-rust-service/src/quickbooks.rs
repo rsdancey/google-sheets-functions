@@ -2,13 +2,13 @@ use anyhow::{Result, anyhow};
 use std::mem::ManuallyDrop;
 use std::ptr;
 use windows_core::{BSTR, HSTRING, IUnknown};
-use windows::core::{PCWSTR, PCSTR};
+use windows::core::PCWSTR;
 use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
     CoCreateInstance, CLSCTX_ALL, CLSIDFromProgID,
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
-use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegOpenKeyExA, RegCloseKey};
+use windows::Win32::System::Registry::HKEY;
 use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
 
@@ -99,24 +99,8 @@ impl QuickBooksClient {
             let request_processor_id = "QBXMLRPLib.RequestProcessor";
             log::debug!("Attempting to create Session Manager");
 
-            // Check registry for Request Processor
-            let mut hkey = HKEY::default();
-            let key_path = format!("SOFTWARE\\Classes\\{}\\CLSID", request_processor_id) + "\0";
-            let result = RegOpenKeyExA(
-                HKEY_LOCAL_MACHINE,
-                PCSTR(key_path.as_ptr()),
-                0,
-                KEY_READ,
-                mut hkey
-            );
-
-            if result.is_err() {
-                let msg = format!("QuickBooks Session Manager not found in registry. Please ensure QuickBooks and the SDK v16 are properly installed.");
-                log::error!("{}", msg);
-                CoUninitialize();
-                return Err(anyhow!(msg));
-            }
-            let _ = RegCloseKey(hkey);
+            // Create Request Processor
+            log::debug!("Creating Request Processor");
 
             // Create Request Processor
             let prog_id = HSTRING::from(request_processor_id);
@@ -169,13 +153,13 @@ impl QuickBooksClient {
 
             match request_processor.Invoke(
                 1,  // DISPID for OpenConnection2
-                Default::default(),
+                &Default::default(),
                 0,
                 DISPATCH_METHOD,
-                mut params,
-                Some(mut result),
-                Some(mut exc_info),
-                Some(mut arg_err),
+                &mut params,
+                Some(&mut result),
+                Some(&mut exc_info),
+                Some(&mut arg_err),
             ) {
                 Ok(_) => {
                     log::debug!("Successfully connected to QuickBooks");
@@ -199,7 +183,7 @@ impl QuickBooksClient {
                 let mut params = DISPPARAMS::default();
                 let mut args = vec![
                     create_bstr_variant(qb_file),
-                    create_bstr_variant(&QBXMLRPLib::qbFileOpenDoNotCare.to_string()),  // Using DoNotCare mode
+create_bstr_variant("DoNotCare")
                 ];
                 params.rgvarg = args.as_mut_ptr();
                 params.cArgs = args.len() as u32;
