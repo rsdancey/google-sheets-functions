@@ -95,14 +95,10 @@ impl QuickBooksClient {
 
             // Create Request Processor exactly as in the sample
             log::debug!("Creating Request Processor");
+            // Use QBXMLRP2.RequestProcessor.2 as shown in Windows registry for 64-bit QuickBooks Enterprise v24
             let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
-            log::debug!("Using ProgID: {}", prog_id);
-            log::debug!("Getting CLSID from ProgID");
             let clsid = match CLSIDFromProgID(&prog_id) {
-                Ok(clsid) => {
-                    log::debug!("Got CLSID: {:?}", clsid);
-                    clsid
-                },
+                Ok(clsid) => clsid,
                 Err(e) => {
                     let msg = format!("Failed to get CLSID for Request Processor: 0x{:08X}", e.code().0);
                     log::error!("{}", msg);
