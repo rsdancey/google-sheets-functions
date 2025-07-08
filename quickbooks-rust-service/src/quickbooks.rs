@@ -105,7 +105,7 @@ impl QuickBooksClient {
                     HKEY_LOCAL_MACHINE,
                     PCSTR(key_path.as_ptr()),
                     0,
-                    KEY_READ.0,
+                    KEY_READ,
                     &mut hkey
                 );
 
@@ -118,7 +118,7 @@ impl QuickBooksClient {
                     match CLSIDFromProgID(&prog_id) {
                         Ok(clsid) => {
                             log::debug!("Got CLSID for {}", prog_id_str);
-                            match CoCreateInstance::<IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
+                            match CoCreateInstance::<IDispatch, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
                                 Ok(session_manager) => {
                                     log::debug!("Created session manager with {}", prog_id_str);
                                     
@@ -190,7 +190,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance(
+            let session_manager: IDispatch = CoCreateInstance::<IDispatch, IDispatch>(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -224,7 +224,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance(
+            let session_manager: IDispatch = CoCreateInstance::<IDispatch, IDispatch>(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -259,7 +259,7 @@ impl QuickBooksClient {
                 let clsid = CLSIDFromProgID(&prog_id)
                     .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-                let session_manager: IDispatch = CoCreateInstance(
+                let session_manager: IDispatch = CoCreateInstance::<IDispatch, IDispatch>(
                     &clsid,
                     None,
                     CLSCTX_LOCAL_SERVER
