@@ -12,6 +12,10 @@ use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProces
 
 use crate::QuickBooksConfig;
 
+/// Connection type for QuickBooks integration
+/// 
+/// Currently hardcoded to Local (localQBD) for direct desktop connection.
+/// Other options are maintained for future configuration flexibility.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConnectionType {
     Local,           // localQBD
@@ -28,12 +32,18 @@ pub enum FileMode {
     DoNotCare,
 }
 
+/// Unattended mode configuration
+/// 
+/// Currently hardcoded to Optional, allowing both attended and unattended operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnattendedMode {
     Required,
     Optional,
 }
 
+/// Personal data handling preference
+/// 
+/// Currently hardcoded to Optional, providing flexibility in data access.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PersonalDataPref {
     Required,
@@ -41,6 +51,14 @@ pub enum PersonalDataPref {
     NotNeeded,
 }
 
+/// Authentication preferences for QuickBooks connection
+/// 
+/// Current hardcoded configuration:
+/// - Unattended Mode: Optional (allows both attended/unattended)
+/// - Personal Data: Optional (flexible data access)
+/// - Enterprise Edition only (other editions disabled)
+/// - Read-only: false (allows writes)
+/// - Force Auth Dialog: false (use default auth behavior)
 #[derive(Debug, Clone)]
 pub struct AuthPreferences {
     pub unattended_mode: UnattendedMode,
@@ -68,6 +86,12 @@ impl Default for AuthPreferences {
     }
 }
 
+/// QuickBooks client with hardcoded configuration:
+/// - Connection: Local (localQBD)
+/// - File Mode: Do Not Care (accepts any mode)
+/// - Auth: Enterprise Edition, Optional modes
+/// - XML Version: 13 (latest supported)
+/// - Country: US
 pub struct QuickBooksClient {
     config: QuickBooksConfig,
     session_ticket: Option<String>,
@@ -92,9 +116,18 @@ impl QuickBooksClient {
             session_manager: None,
             request_processor: None,
             is_com_initialized: false,
-            connection_type: ConnectionType::Unknown,
+connection_type: ConnectionType::Local,
             file_mode: FileMode::DoNotCare,
-            auth_preferences: AuthPreferences::default(),
+auth_preferences: AuthPreferences {
+                unattended_mode: UnattendedMode::Optional,
+                personal_data: PersonalDataPref::Optional,
+                is_read_only: false,
+                enterprise_enabled: true,
+                premier_enabled: false,
+                pro_enabled: false,
+                simple_enabled: false,
+                force_auth_dialog: false,
+            },
             xml_version: 13,
             xml_country: "US".to_string(),
             xml_minor_version: 0,
@@ -217,14 +250,20 @@ pub fn connect(&mut self, qb_file: &str) -> Result<()> {
 
             // Set up parameters exactly like sdktest.cpp
             let mut params = DISPPARAMS::default();
-            let app_id = ManuallyDrop::new(BSTR::from(""));
-            let app_name = ManuallyDrop::new(BSTR::from(&self.config.app_name));
+            let _app_id = ManuallyDrop::new(BSTR::from(""));
+            let _app_name = ManuallyDrop::new(BSTR::from(&self.config.app_name));
             // Parameters MUST be in exact API order: appID, then appName
             let mut args = vec![
                 create_bstr_variant(""),             // appID (first parameter)
                 create_bstr_variant(&self.config.app_name),  // appName (second parameter)
             ];
-log::debug!("Calling Request Processor with args in API order: appID (BSTR): {}, appName (BSTR): {}, connPref (BSTR): {}", "", self.config.app_name, conn_pref);
+            log::debug!(
+                "Calling Request Processor with args:
+                 - appID: '{}'
+                 - appName: '{}'
+                 - connPref: '{}'",
+                "", self.config.app_name, conn_pref
+            );
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
 
@@ -258,7 +297,7 @@ create_bstr_variant(match self.file_mode {
     FileMode::DoNotCare => "qbFileOpenDoNotCare",
 }), // Mode (second parameter)
                     ];
-                    for (i, arg) in args.iter().enumerate() {
+                    for (i, _arg) in args.iter().enumerate() {
                         log::debug!("BeginSession arg {}: BSTR", i);
                     }
                     params.rgvarg = args.as_mut_ptr();
