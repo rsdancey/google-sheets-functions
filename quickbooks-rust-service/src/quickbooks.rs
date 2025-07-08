@@ -150,7 +150,7 @@ impl QuickBooksClient {
                     log::debug!("Successfully opened connection");
 
                     // Begin session immediately after successful connection
-                    log::debug!("Beginning session");
+                    log::debug!("Beginning session with company file: {}", qb_file);
                     let mut params = DISPPARAMS::default();
                     // For COM, parameters are passed in reverse order
                     let mut args = vec![
