@@ -12,6 +12,62 @@ use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProces
 
 use crate::QuickBooksConfig;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConnectionType {
+    Local,           // localQBD
+    LocalWithUI,     // localQBDLaunchUI
+    Remote,          // remoteQBD
+    RemoteQBOE,      // remoteQBOE
+    Unknown,         // For default/unspecified
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileMode {
+    SingleUser,
+    MultiUser,
+    DoNotCare,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnattendedMode {
+    Required,
+    Optional,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PersonalDataPref {
+    Required,
+    Optional,
+    NotNeeded,
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthPreferences {
+    pub unattended_mode: UnattendedMode,
+    pub personal_data: PersonalDataPref,
+    pub is_read_only: bool,
+    pub enterprise_enabled: bool,
+    pub premier_enabled: bool,
+    pub pro_enabled: bool,
+    pub simple_enabled: bool,
+    pub force_auth_dialog: bool,
+}
+
+impl Default for AuthPreferences {
+    fn default() -> Self {
+        Self {
+            unattended_mode: UnattendedMode::Optional,
+            personal_data: PersonalDataPref::Optional,
+            is_read_only: false,
+            enterprise_enabled: true,
+            premier_enabled: true,
+            pro_enabled: true,
+            simple_enabled: true,
+            force_auth_dialog: false,
+        }
+    }
+}
+
 pub struct QuickBooksClient {
     config: QuickBooksConfig,
     session_ticket: Option<String>,
@@ -19,6 +75,12 @@ pub struct QuickBooksClient {
     session_manager: Option<IDispatch>,
     request_processor: Option<IDispatch>,
     is_com_initialized: bool,
+    connection_type: ConnectionType,
+    file_mode: FileMode,
+    auth_preferences: AuthPreferences,
+    xml_version: i32,        // QB XML version (default: 13)
+    xml_country: String,     // Country code (default: "US")
+    xml_minor_version: i32,  // QB XML minor version (default: 0)
 }
 
 impl QuickBooksClient {
@@ -30,6 +92,12 @@ impl QuickBooksClient {
             session_manager: None,
             request_processor: None,
             is_com_initialized: false,
+            connection_type: ConnectionType::Unknown,
+            file_mode: FileMode::DoNotCare,
+            auth_preferences: AuthPreferences::default(),
+            xml_version: 13,
+            xml_country: "US".to_string(),
+            xml_minor_version: 0,
         })
     }
 
@@ -75,9 +143,20 @@ impl QuickBooksClient {
         }
     }
 
-    pub fn connect(&mut self, qb_file: &str) -> Result<()> {
-        // Assume QuickBooks is running
-        log::debug!("Attempting to connect to QuickBooks");
+pub fn connect(mut self, qb_file: str) -Result() {
+    // Assume QuickBooks is running
+    log::debug!("Attempting to connect to QuickBooks");
+
+    // Set connection type based on configuration
+    let conn_pref = match self.connection_type {
+        ConnectionType::Local => "LocalQBD",
+        ConnectionType::LocalWithUI => "LocalQBDLaunchUI",
+        ConnectionType::Remote => "RemoteQBD",
+        ConnectionType::RemoteQBOE => "RemoteQBOE",
+        _ => "Unknown",
+    };
+
+    log::debug!("Connection preference: {}", conn_pref);
 
         unsafe {
             // Initialize COM with detailed error handling
@@ -145,7 +224,7 @@ impl QuickBooksClient {
                 create_bstr_variant(""),             // appID (first parameter)
                 create_bstr_variant(&self.config.app_name),  // appName (second parameter)
             ];
-            log::debug!("Calling Request Processor with args in API order: appID (BSTR): {:?}, appName (BSTR): {:?}", "", &self.config.app_name);
+log::debug!("Calling Request Processor with args in API order: appID (BSTR): {:?}, appName (BSTR): {:?}, connPref (BSTR): {:?}", "", self.config.app_name, conn_pref);
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
 
@@ -172,8 +251,12 @@ impl QuickBooksClient {
                     let mut params = DISPPARAMS::default();
                     // Parameters MUST be in exact API order
                     let mut args = vec![
-                        create_bstr_variant(""),               // Company file (first parameter)
-                        create_bstr_variant("qbXMLModeEnter"),  // Mode (second parameter)
+create_bstr_variant(qb_file),                    // Company file (first parameter)
+create_bstr_variant(match self.file_mode {
+    FileMode::SingleUser => "qbFileOpenSingleUser",
+    FileMode::MultiUser => "qbFileOpenMultiUser",
+    FileMode::DoNotCare => "qbFileOpenDoNotCare",
+}), // Mode (second parameter)
                     ];
                     for (i, arg) in args.iter().enumerate() {
                         log::debug!("BeginSession arg {}: BSTR", i);
@@ -356,13 +439,41 @@ fn create_bstr_variant(s: &str) -> VARIANT {
     }
 }
 
-fn variant_to_string(variant: &VARIANT) -> Result<String> {
+fn process_xml_request(self, request: str) -ResultString {
     unsafe {
-        let variant_anon = &variant.Anonymous;
-        let variant_union = &variant_anon.Anonymous;
-        
+        let mut params = DISPPARAMS::default();
+        let mut result = VARIANT::default();
+        let mut exc_info = EXCEPINFO::default();
+        let mut arg_err = 0u32;
+
+        let bstr_request = create_bstr_variant(request);
+        let mut args = vec![bstr_request];
+
+        params.rgvarg = args.as_mut_ptr();
+        params.cArgs = args.len() as u32;
+
+        self.request_processor.as_mut().unwrap().Invoke(
+            4,  // DISPID for ProcessRequest
+            Default::default(),
+            0,
+            DISPATCH_METHOD,
+            mut params,
+            Some(mut result),
+            Some(mut exc_info),
+            Some(mut arg_err),
+        ).map_err(|e| anyhow!("Failed to process XML request: {:?}", e))?;
+
+        variant_to_string(result)
+    }
+}
+
+fn variant_to_string(variant: VARIANT) -ResultString {
+    unsafe {
+        let variant_anon = variant.Anonymous;
+        let variant_union = variant_anon.Anonymous;
+
         if variant_union.vt == VARENUM(VT_BSTR.0) {
-            let bstr = &variant_union.Anonymous.bstrVal;
+            let bstr = variant_union.Anonymous.bstrVal;
             return Ok(bstr.to_string());
         }
         Err(anyhow!("Failed to convert VARIANT to string"))
