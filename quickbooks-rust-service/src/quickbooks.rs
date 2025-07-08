@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use std::mem::ManuallyDrop;
 use std::ptr;
-use windows_core::{w, BSTR, HSTRING};
+use windows_core::{BSTR, HSTRING, IUnknown};
 use windows::core::{PCWSTR, PCSTR};
 use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
@@ -9,7 +9,6 @@ use windows::Win32::System::Com::{
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
 use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegOpenKeyExA, RegCloseKey};
-use std::ffi::c_void;
 use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
 
@@ -118,7 +117,7 @@ impl QuickBooksClient {
                     match CLSIDFromProgID(&prog_id) {
                         Ok(clsid) => {
                             log::debug!("Got CLSID for {}", prog_id_str);
-                            match CoCreateInstance::<IDispatch, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
+                            match CoCreateInstance::<Option<IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
                                 Ok(session_manager) => {
                                     log::debug!("Created session manager with {}", prog_id_str);
                                     
@@ -190,7 +189,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::<IDispatch, IDispatch>(
+            let session_manager: IDispatch = CoCreateInstance::<Option<IUnknown>, IDispatch>(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -224,7 +223,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::<IDispatch, IDispatch>(
+            let session_manager: IDispatch = CoCreateInstance::<Option<IUnknown>, IDispatch>(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -259,7 +258,7 @@ impl QuickBooksClient {
                 let clsid = CLSIDFromProgID(&prog_id)
                     .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-                let session_manager: IDispatch = CoCreateInstance::<IDispatch, IDispatch>(
+                let session_manager: IDispatch = CoCreateInstance::<Option<IUnknown>, IDispatch>(
                     &clsid,
                     None,
                     CLSCTX_LOCAL_SERVER
