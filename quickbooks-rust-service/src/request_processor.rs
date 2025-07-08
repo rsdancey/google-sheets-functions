@@ -23,6 +23,7 @@ pub struct RequestProcessor2 {
 
 impl RequestProcessor2 {
     fn check_registry_paths() -> windows::core::Result<()> {
+        log::info!("Starting detailed COM registration check");
         unsafe {
             let paths = [
                 r"SOFTWARE\Classes\QBXMLRP2.RequestProcessor.2",
@@ -51,9 +52,11 @@ impl RequestProcessor2 {
                     &mut key
                 ) {
                     Ok(_) => {
+                        let mut found_any_values = false;
                         log::debug!("Found registry key: {}", path);
                         let mut buf = [0u8; 260];
                         let mut size = buf.len() as u32;
+                        // Check InprocServer32 key
                         if RegQueryValueExA(
                             key,
                             PCSTR::from_raw(b"InprocServer32\0".as_ptr()),
@@ -67,8 +70,40 @@ impl RequestProcessor2 {
                                 if let Some(path) = Path::new(&path).parent() {
                                     log::debug!("DLL directory exists: {}", path.exists());
                                 }
+                                found_any_values = true;
                             }
                         }
+
+                        // Check additional values
+                        let values_to_check = [
+                            "LocalServer32",
+                            "ProgID",
+                            "VersionIndependentProgID",
+                            "Implemented Categories",
+                        ];
+
+                        for value_name in values_to_check.iter() {
+                            let mut buf = [0u8; 260];
+                            let mut size = buf.len() as u32;
+                            if RegQueryValueExA(
+                                key,
+                                PCSTR::from_raw(format!("{value_name}\0").as_ptr() as *const u8),
+                                None,
+                                None,
+                                Some(buf.as_mut_ptr() as *mut u8),
+                                Some(&mut size),
+                            ).is_ok() {
+                                if let Ok(value) = String::from_utf8(buf[..size as usize].to_vec()) {
+                                    log::debug!("Found {} = {}", value_name, value.trim_end_matches('\0'));
+                                    found_any_values = true;
+                                }
+                            }
+                        }
+
+                        if !found_any_values {
+                            log::warn!("Registry key exists but has no relevant values: {}", path);
+                        }
+
                         let _ = RegCloseKey(key);
                     },
                     Err(e) => {
