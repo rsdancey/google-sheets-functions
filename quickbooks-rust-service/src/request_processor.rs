@@ -69,14 +69,14 @@ impl RequestProcessor2 {
                                 }
                             }
                         }
-                        RegCloseKey(key);
+                        let _ = RegCloseKey(key);
                     },
                     Err(e) => {
                         log::warn!("Registry key not found: {} (error: 0x{:08X})", path, e.code().0);
                     }
                 }
             }
-            RegCloseKey(hklm);
+            let _ = RegCloseKey(hklm);
         }
         Ok(())
     }
