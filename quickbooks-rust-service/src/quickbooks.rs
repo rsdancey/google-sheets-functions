@@ -7,6 +7,7 @@ use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
     CoCreateInstance, CLSCTX_ALL, CLSIDFromProgID,
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
+    IRequestProcessor2,
 };
 use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
@@ -108,7 +109,7 @@ impl QuickBooksClient {
             };
 
             // Create instance of Request Processor
-            let request_processor = match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
+            let request_processor = match CoCreateInstance::<Option<&IUnknown>, IRequestProcessor2>(&clsid, None, CLSCTX_ALL) {
                 Ok(rp) => {
                     self.request_processor = Some(rp.clone());
                     rp
