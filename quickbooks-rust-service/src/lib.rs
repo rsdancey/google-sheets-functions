@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use serde::Deserialize;
 use windows::Win32::System::Com::{CoInitialize, CoUninitialize};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
-use windows_core::{HSTRING, PCWSTR};
+use windows::core::{HSTRING, PCWSTR};
 
 use crate::request_processor::RequestProcessor2;
 
@@ -145,15 +145,8 @@ impl QuickBooksClient {
 
 impl Drop for QuickBooksClient {
     fn drop(&mut self) {
-        if let Some(rp) = self.request_processor.take() {
-            if let Some(ticket) = self.session_ticket.take() {
-                let _ = rp.end_session(&ticket);
-                let _ = rp.close_connection();
-            }
-        }
-
-        if self.is_com_initialized {
-            unsafe { CoUninitialize(); }
+if self.is_com_initialized {
+            unsafe { CoUninitialize() };
         }
     }
 }

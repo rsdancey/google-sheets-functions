@@ -1,11 +1,10 @@
-use windows::core::{HSTRING, IUnknown, PCWSTR, PCSTR};
-use windows::Win32::System::Com::{
-    CLSIDFromProgID, CoCreateInstance,
-    CLSCTX_LOCAL_SERVER, CLSCTX_INPROC_SERVER, CLSCTX_ALL,
-    IDispatch, DISPATCH_METHOD, EXCEPINFO,
-};
-use windows::Win32::System::Registry::*;
 use std::path::Path;
+use std::ffi::CString;
+use std::ptr;
+use windows::core::{GUID, HSTRING, PCWSTR, PCSTR, PSTR};
+use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER};
+use windows::Win32::System::Com::{CLSIDFromProgID, CoCreateInstance, CLSCTX_ALL, IDispatch, EXCEPINFO, DISPATCH_METHOD, DISPATCH_FLAGS};
+use windows::Win32::System::Registry::{RegOpenKeyExA, RegQueryValueExA, RegEnumKeyExA, RegCloseKey, KEY_READ};
 use windows::Win32::System::Variant::VARIANT;
 use crate::com_helpers::{create_bstr_variant, create_dispparams, create_empty_dispparams, variant_to_string};
 use crate::FileMode;
@@ -52,7 +51,7 @@ impl RequestProcessor2 {
                 let mut key = HKEY::default();
                 if RegOpenKeyExA(
                     HKEY_LOCAL_MACHINE,
-                    PCSTR::from_raw(base_path.as_bytes().as_ptr() as *const u8),
+                    PCSTR::from_raw(base_path.as_bytes().as_ptr()),
                     0,
                     KEY_READ,
                     &mut key
@@ -65,10 +64,10 @@ impl RequestProcessor2 {
                     while RegEnumKeyExA(
                         key,
                         index,
-                        PCSTR::from_raw(name_buf.as_mut_ptr()),
+                        PSTR(name_buf.as_mut_ptr() as *mut u8),
                         &mut name_size,
                         None,
-                        None,
+                        PSTR(ptr::null_mut()),
                         None,
                         None,
                     ).is_ok() {
@@ -95,7 +94,7 @@ impl RequestProcessor2 {
                 let mut key = HKEY::default();
                 match RegOpenKeyExA(
                     HKEY_LOCAL_MACHINE,
-                    PCSTR::from_raw(path.as_bytes().as_ptr() as *const u8),
+                    PCSTR::from_raw(path.as_bytes().as_ptr()),
                     0,
                     KEY_READ,
                     &mut key
@@ -182,7 +181,7 @@ impl RequestProcessor2 {
                 let mut key = HKEY::default();
                 match RegOpenKeyExA(
                     hkcu,
-                    PCSTR::from_raw(path.as_ptr() as *const u8),
+                    PCSTR::from_raw(path.as_bytes().as_ptr()),
                     0,
                     KEY_READ,
                     &mut key
@@ -226,7 +225,7 @@ impl RequestProcessor2 {
                 let mut key = HKEY::default();
                 match RegOpenKeyExA(
                     hklm,
-                    PCSTR::from_raw(path.as_ptr() as *const u8),
+                    PCSTR::from_raw(path.as_bytes().as_ptr()),
                     0,
                     KEY_READ,
                     &mut key
@@ -268,7 +267,7 @@ impl RequestProcessor2 {
                             let mut size = buf.len() as u32;
                             if RegQueryValueExA(
                                 key,
-                                PCSTR::from_raw(format!("{value_name}\0").as_ptr() as *const u8),
+                            PCSTR::from_raw(CString::new(format!("{value_name}")).unwrap().as_bytes_with_nul().as_ptr()),
                                 None,
                                 None,
                                 Some(buf.as_mut_ptr() as *mut u8),
@@ -302,41 +301,14 @@ impl RequestProcessor2 {
         Self::check_registry_paths()?;
 
         let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
-        log::debug!("Attempting to get CLSID for ProgID: {}", prog_id);
         let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
-        log::debug!("Got CLSID: {:?}", clsid);
-        // Try different server types
-        let server_types = [
-            (CLSCTX_LOCAL_SERVER, "CLSCTX_LOCAL_SERVER"),
-            (CLSCTX_INPROC_SERVER, "CLSCTX_INPROC_SERVER"),
-            (CLSCTX_ALL, "CLSCTX_ALL"),
-        ];
-
-        let mut last_error = None;
-        let mut dispatch = None;
-
-        for (server_type, type_name) in server_types.iter() {
-            log::debug!("Attempting to create COM instance with {}", type_name);
-            match unsafe {
-                CoCreateInstance::<Option<&IUnknown>, IDispatch>(
-                    &clsid,
-                    None,
-                    *server_type
-                )
-            } {
-                Ok(disp) => {
-                    log::debug!("Successfully created COM instance with {}", type_name);
-                    dispatch = Some(disp);
-                    break;
-                }
-                Err(e) => {
-                    log::error!("CoCreateInstance with {} failed with error code: 0x{:08X}", type_name, e.code().0);
-                    last_error = Some(e);
-                }
-            }
-        }
-
-        let dispatch = dispatch.ok_or_else(|| last_error.unwrap())?;
+        let dispatch: IDispatch = unsafe {
+            CoCreateInstance(
+                &clsid,
+                None,
+                CLSCTX_ALL
+            )?
+        };
         log::debug!("Successfully created COM instance");
 
         // Get all method IDs upfront
@@ -368,33 +340,36 @@ impl RequestProcessor2 {
                 1,
                 0x0409, // LCID_ENGLISH_US
                 &mut dispid,
-            )?;
+            )?
         }
         Ok(dispid)
     }
 
-    pub fn open_connection(&self, app_id: &str, app_name: &str) -> windows::core::Result<()> {
+pub fn open_connection(&self, app_id: &str, app_name: &str) -> windows::core::Result<()> {
         let app_id_var = create_bstr_variant(app_id);
         let app_name_var = create_bstr_variant(app_name);
         let args = [app_id_var, app_name_var];
 
         let mut params = create_dispparams(&args);
+        let mut result = VARIANT::default();
+        let mut exc_info = EXCEPINFO::default();
+        let mut arg_err = 0u32;
         
         unsafe {
             self.inner.Invoke(
                 self.open_connection_id,
-                &windows::core::GUID::zeroed(),
-                0x0409,
-                DISPATCH_METHOD,
+                &GUID::zeroed(),
+                0x0409,  // LOCALE_SYSTEM_DEFAULT
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
                 &mut params,
-                None,
-                None,
-                None,
+                Some(&mut result),
+                Some(&mut exc_info),
+                Some(&mut arg_err)
             )
         }
     }
 
-    pub fn begin_session(&self, company_file: &str, file_mode: FileMode) -> windows::core::Result<String> {
+pub fn begin_session(&self, company_file: &str, file_mode: FileMode) -> windows::core::Result<String> {
         let file_var = create_bstr_variant(company_file);
         let mode_var = create_bstr_variant(match file_mode {
             FileMode::SingleUser => "qbFileOpenSingleUser",
@@ -405,98 +380,110 @@ impl RequestProcessor2 {
 
         let mut params = create_dispparams(&args);
         let mut result = VARIANT::default();
-        
+        let mut exc_info = EXCEPINFO::default();
+        let mut arg_err = 0u32;
+
         unsafe {
             self.inner.Invoke(
                 self.begin_session_id,
-                &windows::core::GUID::zeroed(),
-                0x0409,
-                DISPATCH_METHOD,
+                &GUID::zeroed(),
+                0x0409,  // LOCALE_SYSTEM_DEFAULT
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
                 &mut params,
                 Some(&mut result),
-                None,
-                None,
+                Some(&mut exc_info),
+                Some(&mut arg_err)
             )?;
             
             variant_to_string(&result)
         }
     }
 
-    pub fn end_session(&self, ticket: &str) -> windows::core::Result<()> {
+pub fn end_session(&self, ticket: &str) -> windows::core::Result<()> {
         let ticket_var = create_bstr_variant(ticket);
         let args = [ticket_var];
         let mut params = create_dispparams(&args);
-        
+        let mut result = VARIANT::default();
+        let mut exc_info = EXCEPINFO::default();
+        let mut arg_err = 0u32;
+
         unsafe {
             self.inner.Invoke(
                 self.end_session_id,
-                &windows::core::GUID::zeroed(),
-                0x0409,
-                DISPATCH_METHOD,
+                &GUID::zeroed(),
+                0x0409,  // LOCALE_SYSTEM_DEFAULT
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
                 &mut params,
-                None,
-                None,
-                None,
+                Some(&mut result),
+                Some(&mut exc_info),
+                Some(&mut arg_err)
             )
         }
     }
 
-    pub fn close_connection(&self) -> windows::core::Result<()> {
+pub fn close_connection(&self) -> windows::core::Result<()> {
         let mut params = create_empty_dispparams();
+        let mut result = VARIANT::default();
+        let mut exc_info = EXCEPINFO::default();
+        let mut arg_err = 0u32;
         
         unsafe {
             self.inner.Invoke(
                 self.close_connection_id,
-                &windows::core::GUID::zeroed(),
-                0x0409,
-                DISPATCH_METHOD,
+                &GUID::zeroed(),
+                0x0409,  // LOCALE_SYSTEM_DEFAULT
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
                 &mut params,
-                None,
-                None,
-                None,
+                Some(&mut result),
+                Some(&mut exc_info),
+                Some(&mut arg_err)
             )
         }
     }
 
-    pub fn process_request(&self, ticket: &str, request: &str) -> windows::core::Result<String> {
+pub fn process_request(&self, ticket: &str, request: &str) -> windows::core::Result<String> {
         let ticket_var = create_bstr_variant(ticket);
         let request_var = create_bstr_variant(request);
         let args = [ticket_var, request_var];
         let mut params = create_dispparams(&args);
         let mut result = VARIANT::default();
-        
+        let mut exc_info = EXCEPINFO::default();
+        let mut arg_err = 0u32;
+
         unsafe {
             self.inner.Invoke(
                 self.process_request_id,
-                &windows::core::GUID::zeroed(),
-                0x0409,
-                DISPATCH_METHOD,
+                &GUID::zeroed(),
+                0x0409,  // LOCALE_SYSTEM_DEFAULT
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
                 &mut params,
                 Some(&mut result),
-                None,
-                None,
+                Some(&mut exc_info),
+                Some(&mut arg_err)
             )?;
             
             variant_to_string(&result)
         }
     }
 
-    pub fn get_current_company_file_name(&self, ticket: &str) -> windows::core::Result<String> {
-        let mut params = create_dispparams(&[create_bstr_variant(ticket)]);
+pub fn get_current_company_file_name(&self, ticket: &str) -> windows::core::Result<String> {
+        let ticket_var = create_bstr_variant(ticket);
+        let args = [ticket_var];
+        let mut params = create_dispparams(&args);
         let mut result = VARIANT::default();
         let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0;
-        
+        let mut arg_err = 0u32;
+
         unsafe {
             self.inner.Invoke(
                 3,  // DISPID for GetCurrentCompanyFileName
-                &windows::core::GUID::zeroed(),
-                0x0409,
-                DISPATCH_METHOD,
+                &GUID::zeroed(),
+                0x0409,  // LOCALE_SYSTEM_DEFAULT
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
                 &mut params,
                 Some(&mut result),
                 Some(&mut exc_info),
-                Some(&mut arg_err),
+                Some(&mut arg_err)
             )?;
             
             variant_to_string(&result)
