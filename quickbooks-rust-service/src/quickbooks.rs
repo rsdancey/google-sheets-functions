@@ -123,7 +123,7 @@ impl QuickBooksClient {
 
             // Open connection
             log::debug!("Opening connection");
-            log::debug!("Calling OpenConnection(appID: BSTR='', appName: BSTR='{}')", self.config.app_name);
+            log::debug!("COM array for OpenConnection: [0]=BSTR('{}'), [1]=BSTR('')", self.config.app_name);
             let mut params = DISPPARAMS::default();
             // NOTE: For COM calls using DISPPARAMS, parameters must be in reverse order from the C++ sample
             let mut args = vec![
@@ -155,7 +155,7 @@ impl QuickBooksClient {
 
                     // Begin session immediately after successful connection
                     log::debug!("Beginning session with company file: {}", qb_file);
-                    log::debug!("Calling BeginSession(companyFile: BSTR='', mode: BSTR='qbXMLModeEnter')");
+                    log::debug!("COM array for BeginSession: [0]=BSTR('qbXMLModeEnter'), [1]=BSTR('')");
                     let mut params = DISPPARAMS::default();
                     // For COM, parameters are passed in reverse order
                     let mut args = vec![
@@ -284,7 +284,7 @@ impl Drop for QuickBooksClient {
                     let mut exc_info = EXCEPINFO::default();
                     let mut arg_err = 0u32;
 
-                    log::debug!("Calling EndSession(ticket: BSTR='{}')", ticket);
+                    log::debug!("COM array for EndSession: [0]=BSTR('{}')", ticket);
                     let _ = request_processor.Invoke(
                         5,  // DISPID for EndSession
                         &Default::default(),
@@ -298,7 +298,7 @@ impl Drop for QuickBooksClient {
 
                     // Try to close connection - takes no parameters
                     let mut params = DISPPARAMS::default();
-                    log::debug!("Calling CloseConnection()");
+                    log::debug!("COM array for CloseConnection: []");
                     let _ = request_processor.Invoke(
                         6,  // DISPID for CloseConnection
                         &Default::default(),
