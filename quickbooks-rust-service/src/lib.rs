@@ -104,7 +104,7 @@ impl QuickBooksClient {
         }
     }
 
-    pub fn connect(&mut self, qb_file: &str) -> Result<()> {
+pub fn connect(&mut self) -> Result<()> {
         log::debug!("Attempting to connect to QuickBooks");
 
         // Initialize COM
@@ -129,19 +129,26 @@ impl QuickBooksClient {
             })?;
         log::debug!("Connection opened successfully");
 
-        // Begin session
-        let ticket = request_processor.begin_session(qb_file, self.file_mode.clone())
-            .map_err(|e| {
-                log::error!("Failed to begin session - error code: 0x{:08X}", e.code().0);
-                log::error!("Error message: {}", e.message());
-                anyhow!("Failed to begin session: {} (0x{:08X})", e, e.code().0)
-            })?;
-        log::debug!("Session started successfully");
-
-        self.session_ticket = Some(ticket);
         self.request_processor = Some(request_processor);
-
         Ok(())
+    }
+
+    pub fn begin_session(&mut self, qb_file: &str) -> Result<()> {
+        if let Some(ref processor) = self.request_processor {
+            // Begin session
+            let ticket = processor.begin_session(qb_file, self.file_mode.clone())
+                .map_err(|e| {
+                    log::error!("Failed to begin session - error code: 0x{:08X}", e.code().0);
+                    log::error!("Error message: {}", e.message());
+                    anyhow!("Failed to begin session: {} (0x{:08X})", e, e.code().0)
+                })?;
+            log::debug!("Session started successfully");
+
+            self.session_ticket = Some(ticket);
+            Ok(())
+        } else {
+            Err(anyhow!("Not connected to QuickBooks. Call connect() first."))
+        }
     }
 
     pub fn get_company_file_name(&self) -> Result<String> {

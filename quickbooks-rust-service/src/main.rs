@@ -120,10 +120,15 @@ fn main() -> Result<()> {
     // Create QuickBooks client
     let mut qb = QuickBooksClient::new(&config.quickbooks)?;
 
-    // Connect to QuickBooks
+    // First, connect to QuickBooks
     info!("Attempting to connect to QuickBooks...");
-    qb.connect("")?;  // Empty string means use currently open company file
-    info!("Connected to QuickBooks and started session");
+    qb.connect()?;
+    info!("Successfully connected to QuickBooks");
+
+    // Then, begin session
+    info!("Starting QuickBooks session...");
+    qb.begin_session("")?;  // Empty string means use currently open company file
+    info!("Successfully started QuickBooks session");
 
     // Get company file
     let company_file = qb.get_company_file_name()?;

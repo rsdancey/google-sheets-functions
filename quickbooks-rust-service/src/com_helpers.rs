@@ -1,7 +1,17 @@
 use std::ptr;
 use windows::core::{BSTR, Result as WindowsResult};
 use windows::Win32::System::Com::DISPPARAMS;
-use windows::Win32::System::Variant::{VARIANT, VariantChangeType, VAR_CHANGE_FLAGS, VT_BSTR};
+use windows::Win32::System::Variant::{VARIANT, VariantChangeType, VAR_CHANGE_FLAGS, VT_BSTR, VT_I4, VT_DISPATCH};
+use std::mem;
+
+pub(crate) fn create_variant_i4(value: i32) -> VARIANT {
+    unsafe {
+        let mut variant = VARIANT::default();
+        (*variant.Anonymous.Anonymous).vt = VT_I4;
+        (*variant.Anonymous.Anonymous).Anonymous.lVal = value;
+        variant
+    }
+}
 
 pub(crate) fn create_bstr_variant(s: &str) -> VARIANT {
     unsafe {

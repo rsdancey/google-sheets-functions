@@ -3,7 +3,16 @@ use std::ffi::CString;
 use std::ptr;
 use windows::core::{GUID, HSTRING, PCWSTR, PCSTR, PSTR};
 use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER};
-use windows::Win32::System::Com::{CLSIDFromProgID, CoCreateInstance, CLSCTX_ALL, CLSCTX_LOCAL_SERVER, IDispatch, EXCEPINFO, DISPATCH_METHOD, DISPATCH_FLAGS};
+use windows::Win32::System::Com::{CLSIDFromProgID, CoCreateInstance, CLSCTX_LOCAL_SERVER, IDispatch, EXCEPINFO, DISPATCH_METHOD, DISPATCH_FLAGS};
+
+#[derive(Debug)]
+enum QBXMLRPConnectionType {
+    Unknown = 0,
+    LocalQBD = 1,
+    LocalQBDLaunchUI = 2,
+    RemoteQBD = 3,
+    RemoteQBOE = 4,
+}
 use windows::Win32::System::Registry::{RegOpenKeyExA, RegQueryValueExA, RegEnumKeyExA, RegCloseKey, KEY_READ};
 use windows::Win32::System::Variant::VARIANT;
 use crate::com_helpers::{create_bstr_variant, create_dispparams, create_empty_dispparams, variant_to_string};
@@ -14,6 +23,7 @@ pub struct RequestProcessor2 {
     inner: IDispatch,
     // Cache method IDs after first lookup
     open_connection_id: i32,
+    open_connection2_id: i32,
     begin_session_id: i32,
     end_session_id: i32,
     close_connection_id: i32,
@@ -301,29 +311,23 @@ impl RequestProcessor2 {
         Self::check_registry_paths()?;
 
 // Try known CLSIDs
+// Create RequestProcessor2 COM object directly from ProgID
+let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
+let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
+
+// Create the COM object with specific server type
 let dispatch: IDispatch = unsafe {
-    let interop_clsid = GUID::from_values(
-        0x2CA96D00, 0xBB39, 0x4782,
-        [0xBA, 0x2B, 0x4C, 0x97, 0x4E, 0x51, 0x98, 0xF3]
-    );
-    log::debug!("Attempting with Interop CLSID");
-    match CoCreateInstance::<_, IDispatch>(&interop_clsid, None, CLSCTX_ALL | CLSCTX_LOCAL_SERVER) {
-        Ok(dispatch) => {
-            log::debug!("Successfully created Interop COM instance");
-            dispatch
-        },
-        Err(_) => {
-            log::debug!("Falling back to standard ProgID");
-            let fallback_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
-            let fallback_clsid = CLSIDFromProgID(&fallback_id)?;
-            CoCreateInstance(&fallback_clsid, None, CLSCTX_ALL | CLSCTX_LOCAL_SERVER)?
-        }
-    }
+    CoCreateInstance(
+        &clsid,
+        None,
+        CLSCTX_LOCAL_SERVER  // Use local server like SDKTestPlus3
+    )?
 };
         log::debug!("Successfully created COM instance");
 
         // Get all method IDs upfront
         let open_connection_id = Self::get_method_id(&dispatch, "OpenConnection")?;
+        let open_connection2_id = Self::get_method_id(&dispatch, "OpenConnection2")?;
         let begin_session_id = Self::get_method_id(&dispatch, "BeginSession")?;
         let end_session_id = Self::get_method_id(&dispatch, "EndSession")?;
         let close_connection_id = Self::get_method_id(&dispatch, "CloseConnection")?;
@@ -332,6 +336,7 @@ let dispatch: IDispatch = unsafe {
         Ok(Self {
             inner: dispatch,
             open_connection_id,
+            open_connection2_id,
             begin_session_id,
             end_session_id,
             close_connection_id,
@@ -356,7 +361,65 @@ let dispatch: IDispatch = unsafe {
         Ok(dispid)
     }
 
+pub fn open_connection2(&self, app_id: &str, app_name: &str, conn_type: QBXMLRPConnectionType) -> windows::core::Result<()> {
+        let app_id_var = create_bstr_variant(app_id);
+        let app_name_var = create_bstr_variant(app_name);
+        let conn_type_var = VARIANT::default(); // TODO: Create integer variant
+        let args = [app_id_var, app_name_var, conn_type_var];
+
+        let mut params = create_dispparams(&args);
+        let mut result = VARIANT::default();
+        let mut exc_info = EXCEPINFO::default();
+        let mut arg_err = 0u32;
+        
+        unsafe {
+            self.inner.Invoke(
+                self.open_connection2_id,
+                &GUID::zeroed(),
+                0x0409,  // LOCALE_SYSTEM_DEFAULT
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
+                &mut params,
+                Some(&mut result),
+                Some(&mut exc_info),
+                Some(&mut arg_err)
+            )
+        }
+    }
+
 pub fn open_connection(&self, app_id: &str, app_name: &str) -> windows::core::Result<()> {
+        // Set auth preferences first
+        unsafe {
+            let mut auth_prefs_result = VARIANT::default();
+            let _ = self.inner.Invoke(
+                Self::get_method_id(&self.inner, "AuthPreferences")?,
+                &GUID::zeroed(),
+                0x0409,  // LOCALE_SYSTEM_DEFAULT
+                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
+                &mut create_empty_dispparams(),
+                Some(&mut auth_prefs_result),
+                None,
+                None,
+            )?;
+
+            if auth_prefs_result.Anonymous.Anonymous.vt == VT_DISPATCH {
+                let auth_prefs: IDispatch = (*auth_prefs_result.Anonymous.Anonymous.Anonymous.pdispVal).clone();
+                
+                // Set enterprise flag (0x8)
+                let auth_flags = create_variant_i4(0x8);
+                let mut params = create_dispparams(&[auth_flags]);
+                
+                let _ = auth_prefs.Invoke(
+                    Self::get_method_id(&auth_prefs, "PutAuthFlags")?,
+                    &GUID::zeroed(),
+                    0x0409,  // LOCALE_SYSTEM_DEFAULT
+                    DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
+                    &mut params,
+                    None,
+                    None,
+                    None,
+                )?;
+            }
+        }
         let app_id_var = create_bstr_variant(app_id);
         let app_name_var = create_bstr_variant(app_name);
         let args = [app_id_var, app_name_var];
