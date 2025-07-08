@@ -327,7 +327,7 @@ fn create_bstr_variant(s: &str) -> VARIANT {
     let bstr = ManuallyDrop::new(BSTR::from(s));
     unsafe {
         let mut variant = VARIANT::default();
-        let mut variant_anon = &mut variant.Anonymous;
+        let variant_anon = &mut variant.Anonymous;
         let variant_union = &mut variant_anon.Anonymous;
         
         variant_union.vt = VARENUM(VT_BSTR.0);
