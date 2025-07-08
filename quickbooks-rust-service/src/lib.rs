@@ -42,7 +42,7 @@ pub struct AuthPreferences {
 #[allow(dead_code)]
 pub struct QuickBooksClient {
     config: QuickBooksConfig,
-    request_processor: Option<request_processor::RequestProcessor2>,
+request_processor: Option<RequestProcessor2>,
     session_ticket: Option<String>,
     company_file: Option<String>,
     is_com_initialized: bool,
@@ -110,7 +110,7 @@ impl QuickBooksClient {
         self.is_com_initialized = true;
 
         // Create request processor
-        let request_processor = request_processor::RequestProcessor2::new()
+        let request_processor = RequestProcessor2::new()
             .map_err(|e| anyhow!("Failed to create request processor: {:?}", e))?;
 
         // Open connection
