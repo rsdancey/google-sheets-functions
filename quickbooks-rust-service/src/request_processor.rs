@@ -55,7 +55,7 @@ impl RequestProcessor2 {
                         let mut buf = [0u8; 260];
                         let mut size = buf.len() as u32;
                         if RegQueryValueExA(
-                            &key,
+                            key,
                             PCSTR::from_raw(b"InprocServer32\0".as_ptr()),
                             None,
                             None,
