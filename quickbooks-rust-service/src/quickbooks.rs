@@ -96,7 +96,7 @@ impl QuickBooksClient {
             };
 
             // Try to create Session Manager
-            let session_manager_id = "QBXMLRP2.SessionManager";
+            let session_manager_id = "QBSessionManager16";
             log::debug!("Attempting to create Session Manager");
 
             // Check registry for Session Manager
