@@ -8,7 +8,6 @@ use windows::Win32::System::Com::{
     CoCreateInstance, CLSCTX_ALL, CLSIDFromProgID,
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
-use windows::Win32::System::Registry::HKEY;
 use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
 
