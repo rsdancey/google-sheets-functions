@@ -143,7 +143,7 @@ impl QuickBooksClient {
         }
     }
 
-pub fn connect(mut self, qb_file: str) -Result() {
+pub fn connect(&mut self, qb_file: &str) -> Result<()> {
     // Assume QuickBooks is running
     log::debug!("Attempting to connect to QuickBooks");
 
@@ -224,7 +224,7 @@ pub fn connect(mut self, qb_file: str) -Result() {
                 create_bstr_variant(""),             // appID (first parameter)
                 create_bstr_variant(&self.config.app_name),  // appName (second parameter)
             ];
-log::debug!("Calling Request Processor with args in API order: appID (BSTR): {:?}, appName (BSTR): {:?}, connPref (BSTR): {:?}", "", self.config.app_name, conn_pref);
+log::debug!("Calling Request Processor with args in API order: appID (BSTR): {}, appName (BSTR): {}, connPref (BSTR): {}", "", self.config.app_name, conn_pref);
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
 
@@ -439,41 +439,47 @@ fn create_bstr_variant(s: &str) -> VARIANT {
     }
 }
 
-fn process_xml_request(self, request: str) -ResultString {
-    unsafe {
-        let mut params = DISPPARAMS::default();
-        let mut result = VARIANT::default();
-        let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
+impl QuickBooksClient {
+    fn process_xml_request(&mut self, request: &str) -> Result<String> {
+        unsafe {
+            let mut params = DISPPARAMS::default();
+            let mut result = VARIANT::default();
+            let mut exc_info = EXCEPINFO::default();
+            let mut arg_err = 0u32;
 
-        let bstr_request = create_bstr_variant(request);
-        let mut args = vec![bstr_request];
+            let bstr_request = create_bstr_variant(request);
+            let mut args = vec![bstr_request];
 
-        params.rgvarg = args.as_mut_ptr();
-        params.cArgs = args.len() as u32;
+            params.rgvarg = args.as_mut_ptr();
+            params.cArgs = args.len() as u32;
 
-        self.request_processor.as_mut().unwrap().Invoke(
-            4,  // DISPID for ProcessRequest
-            Default::default(),
-            0,
-            DISPATCH_METHOD,
-            mut params,
-            Some(mut result),
-            Some(mut exc_info),
-            Some(mut arg_err),
-        ).map_err(|e| anyhow!("Failed to process XML request: {:?}", e))?;
+            if let Some(rp) = self.request_processor.as_mut() {
+                rp.Invoke(
+                    4,  // DISPID for ProcessRequest
+                    &Default::default(),
+                    0,
+                    DISPATCH_METHOD,
+                    &mut params,
+                    Some(&mut result),
+                    Some(&mut exc_info),
+                    Some(&mut arg_err),
+                ).map_err(|e| anyhow!("Failed to process XML request: {:?}", e))?;
 
-        variant_to_string(result)
+                variant_to_string(&result)
+            } else {
+                Err(anyhow!("Request processor not initialized"))
+            }
+        }
     }
 }
 
-fn variant_to_string(variant: VARIANT) -ResultString {
+fn variant_to_string(variant: &VARIANT) -> Result<String> {
     unsafe {
-        let variant_anon = variant.Anonymous;
-        let variant_union = variant_anon.Anonymous;
+        let variant_anon = &variant.Anonymous;
+        let variant_union = &variant_anon.Anonymous;
 
         if variant_union.vt == VARENUM(VT_BSTR.0) {
-            let bstr = variant_union.Anonymous.bstrVal;
+            let bstr = &variant_union.Anonymous.bstrVal;
             return Ok(bstr.to_string());
         }
         Err(anyhow!("Failed to convert VARIANT to string"))
