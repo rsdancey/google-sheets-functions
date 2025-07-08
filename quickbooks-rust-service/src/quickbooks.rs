@@ -3,7 +3,7 @@ use std::mem::ManuallyDrop;
 use windows_core::{BSTR, HSTRING, IUnknown};
 use windows::core::PCWSTR;
 use windows::Win32::System::Com::{
-    CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
+    CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED,
     CoCreateInstance, CLSCTX_ALL, CLSIDFromProgID,
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
@@ -81,7 +81,7 @@ impl QuickBooksClient {
 
         unsafe {
             // Initialize COM with detailed error handling
-            match CoInitializeEx(None, COINIT_MULTITHREADED) {
+            match CoInitializeEx(None, COINIT_APARTMENTTHREADED) {
                 Ok(_) => {
                     log::debug!("COM initialized successfully");
                     self.is_com_initialized = true;
