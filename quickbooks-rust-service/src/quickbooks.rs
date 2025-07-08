@@ -151,9 +151,8 @@ impl QuickBooksClient {
                     log::debug!("Beginning session");
                     let mut params = DISPPARAMS::default();
                     let mut args = vec![
-                        create_bstr_variant(qb_file),     // First arg: filename
-                        create_bstr_variant("DoNotCare"), // Second arg: mode
-                        // Third arg: ticket (output parameter)
+                        create_bstr_variant("") ,            // Empty company file (use currently open file)
+                        create_bstr_variant("qbXMLModeEnter"), // Mode
                     ];
                     params.rgvarg = args.as_mut_ptr();
                     params.cArgs = args.len() as u32;
@@ -278,12 +277,12 @@ impl Drop for QuickBooksClient {
                         0,
                         DISPATCH_METHOD,
                         &mut params,
-                        Some(&mut result),
+                        None,  // No result needed
                         Some(&mut exc_info),
                         Some(&mut arg_err),
                     );
 
-                    // Try to close connection
+                    // Try to close connection - takes no parameters
                     let mut params = DISPPARAMS::default();
                     let _ = request_processor.Invoke(
                         6,  // DISPID for CloseConnection
