@@ -155,7 +155,7 @@ impl QuickBooksClient {
                     // For COM, parameters are passed in reverse order
                     let mut args = vec![
                         create_bstr_variant("qbXMLModeEnter"),  // Mode (last parameter first)
-                        create_bstr_variant(""),               // Empty company file (use currently open file)
+                        create_bstr_variant(""),               // Empty company file (first parameter)
                     ];
                     params.rgvarg = args.as_mut_ptr();
                     params.cArgs = args.len() as u32;
@@ -240,6 +240,7 @@ impl QuickBooksClient {
             let mut exc_info = EXCEPINFO::default();
             let mut arg_err = 0u32;
 
+            // GetCurrentCompany takes no parameters, so no need to reverse order
             session_manager.Invoke(
                 3,  // DISPID for GetCurrentCompany
                 &Default::default(),  // GUID for IID_NULL
@@ -266,7 +267,8 @@ impl Drop for QuickBooksClient {
                 if let Some(request_processor) = self.request_processor.take() {
                     // Try to end the session
                     let mut params = DISPPARAMS::default();
-                    let mut args = vec![create_bstr_variant(&ticket)];
+                    // For COM, parameters are passed in reverse order
+                    let mut args = vec![create_bstr_variant(&ticket)];  // Single parameter, no need to reverse
                     params.rgvarg = args.as_mut_ptr();
                     params.cArgs = args.len() as u32;
 
