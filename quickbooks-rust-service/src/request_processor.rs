@@ -45,7 +45,7 @@ impl RequestProcessor2 {
             let mut hklm = HKEY::default();
             let _ = RegOpenKeyExA(
                 HKEY_LOCAL_MACHINE,
-                PCSTR::from_raw(b"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\QuickBooks SDK v15.0\0".as_ptr()),
+                PCSTR::from_raw(b"SOFTWARE/Microsoft/Windows/CurrentVersion/Uninstall/QuickBooks SDK v15.0\0".as_ptr()),
                 0,
                 KEY_READ,
                 &mut hklm
