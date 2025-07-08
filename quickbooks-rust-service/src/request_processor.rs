@@ -300,8 +300,19 @@ impl RequestProcessor2 {
         Self::check_sdk_installation()?;
         Self::check_registry_paths()?;
 
-let prog_id = HSTRING::from("QBXMLRP.RequestProcessor");
-        let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
+// Try the Interop-specific ProgID first
+let prog_id = HSTRING::from("Interop.QBXMLRP2");
+let clsid = unsafe { 
+    match CLSIDFromProgID(&prog_id) {
+        Ok(id) => id,
+        Err(_) => {
+            // Fall back to the standard ProgID
+            log::debug!("Falling back to standard QBXMLRP2.RequestProcessor.2");
+            let fallback_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
+            CLSIDFromProgID(&fallback_id)?
+        }
+    }
+};
 
         // Create the COM object
         let dispatch: IDispatch = unsafe {
