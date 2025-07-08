@@ -28,8 +28,20 @@ pub struct AccountData {
 
 impl Config {
     fn load() -> Result<Self> {
-        let config_str = std::fs::read_to_string("config.json")?;
-        Ok(serde_json::from_str(&config_str)?)
+        let config_path = "config.json";
+        let config_str = std::fs::read_to_string(config_path)
+            .map_err(|e| anyhow::anyhow!(
+                "Failed to read config file '{}': {}. \
+                Make sure the file exists and you have permission to read it.",
+                config_path, e
+            ))?;
+
+        serde_json::from_str(&config_str)
+            .map_err(|e| anyhow::anyhow!(
+                "Failed to parse config file '{}': {}. \
+                Check that the file contains valid JSON in the expected format.",
+                config_path, e
+            ))
     }
 }
 
