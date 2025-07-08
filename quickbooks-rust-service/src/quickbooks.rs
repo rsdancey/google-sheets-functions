@@ -96,7 +96,7 @@ impl QuickBooksClient {
             };
 
             // Try to create Request Processor
-            let request_processor_id = "QBXMLRPLib.RequestProcessor";
+            let request_processor_id = "QBXMLRP2.RequestProcessor";
             log::debug!("Attempting to create Session Manager");
 
             // Create Request Processor
