@@ -329,11 +329,11 @@ fn create_bstr_variant(s: &str) -> VARIANT {
     unsafe {
         let mut variant = VARIANT::default();
         let var_union_ptr = ptr::addr_of_mut!(variant.Anonymous);
-        let var_union2_ptr = ptr::addr_of_mut!((*var_union_ptr).Anonymous);
-        let var_union3_ptr = ptr::addr_of_mut!((*var_union2_ptr).Anonymous);
+        let var_union2_ptr = (*var_union_ptr).Anonymous.as_mut();
+        let var_union3_ptr = var_union2_ptr.Anonymous.as_mut();
         
-        (*var_union2_ptr).vt = VARENUM(VT_BSTR.0);
-        (*var_union3_ptr).bstrVal = bstr;
+        var_union2_ptr.vt = VARENUM(VT_BSTR.0);
+        var_union3_ptr.bstrVal = bstr;
         
         variant
     }
@@ -341,12 +341,12 @@ fn create_bstr_variant(s: &str) -> VARIANT {
 
 fn variant_to_string(variant: &VARIANT) -> Result<String> {
     unsafe {
-        let var_union_ptr = ptr::addr_of!(variant.Anonymous);
-        let var_union2_ptr = ptr::addr_of!((*var_union_ptr).Anonymous);
+        let var_union = variant.Anonymous.as_ref();
+        let var_union2 = var_union.Anonymous.as_ref();
         
-        if (*var_union2_ptr).vt == VARENUM(VT_BSTR.0) {
-            let var_union3_ptr = ptr::addr_of!((*var_union2_ptr).Anonymous);
-            let bstr = &(*var_union3_ptr).bstrVal;
+        if var_union2.vt == VARENUM(VT_BSTR.0) {
+            let var_union3 = var_union2.Anonymous.as_ref();
+            let bstr = &var_union3.bstrVal;
             return Ok(bstr.to_string());
         }
         Err(anyhow!("Failed to convert VARIANT to string"))
