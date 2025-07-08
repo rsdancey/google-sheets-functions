@@ -141,8 +141,8 @@ impl QuickBooksClient {
             // Open connection using the Request Processor
             let mut params = DISPPARAMS::default();
             let mut args = vec![
+                create_bstr_variant(&self.config.app_name),  // Args are in reverse order for COM
                 create_bstr_variant(&self.config.app_id),
-                create_bstr_variant(&self.config.app_name),
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
