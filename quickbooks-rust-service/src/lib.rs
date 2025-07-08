@@ -7,6 +7,8 @@ use windows::Win32::System::Com::{CoInitialize, CoUninitialize};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
 use windows_core::{HSTRING, PCWSTR};
 
+use crate::request_processor::RequestProcessor2;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct QuickBooksConfig {
     pub app_name: String,
