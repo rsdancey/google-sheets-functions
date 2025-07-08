@@ -85,7 +85,7 @@ impl QuickBooksClient {
             };
 
             // Get CLSID with detailed error handling
-            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
+            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor");
             let clsid = match CLSIDFromProgID(&prog_id) {
                 Ok(id) => id,
                 Err(e) => {
