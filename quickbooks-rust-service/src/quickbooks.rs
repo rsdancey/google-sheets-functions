@@ -325,8 +325,8 @@ impl Drop for QuickBooksClient {
 }
 
 fn create_bstr_variant(s: &str) -> VARIANT {
-    // Let Windows handle the VARIANT creation and lifetime management
-    VARIANT::from(BSTR::from(s))
+    let bstr = BSTR::from(s);
+    VARIANT::from(&bstr)
 }
 
 fn variant_to_string(variant: &VARIANT) -> Result<String> {
