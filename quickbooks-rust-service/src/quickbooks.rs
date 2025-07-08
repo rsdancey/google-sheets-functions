@@ -168,18 +168,18 @@ impl QuickBooksClient {
                 Err(e) => {
                     let code = e.code().0;
                     // Log the exception info
-                    if let Some(ex_info) = &exc_info.bstrDescription {
-                        log::error!("Exception description: {}", ex_info);
+                    if !exc_info.bstrDescription.is_empty() {
+                        log::error!("Exception description: {:?}", exc_info.bstrDescription);
                     }
-                    if let Some(ex_source) = &exc_info.bstrSource {
-                        log::error!("Exception source: {}", ex_source);
+                    if !exc_info.bstrSource.is_empty() {
+                        log::error!("Exception source: {:?}", exc_info.bstrSource);
                     }
-                    if exc_info.scode.0 != 0 {
-                        log::error!("Exception scode: 0x{:08X}", exc_info.scode.0);
+                    if exc_info.scode != 0 {
+                        log::error!("Exception scode: 0x{:08X}", exc_info.scode);
                     }
                     
                     let msg = if let Some(info) = e.info() {
-                        format!("Failed to open connection: 0x{:08X} - {}", code, info)
+                        format!("Failed to open connection: 0x{:08X} - {:?}", code, info)
                     } else {
                         format!("Failed to open connection: 0x{:08X}", code)
                     };
