@@ -95,7 +95,7 @@ impl QuickBooksClient {
 
             // Create Request Processor exactly as in the sample
             log::debug!("Creating Request Processor");
-            let prog_id = HSTRING::from("QBXMLRP.RequestProcessor");
+            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
             let clsid = match CLSIDFromProgID(&prog_id) {
                 Ok(clsid) => clsid,
                 Err(e) => {
@@ -140,8 +140,8 @@ impl QuickBooksClient {
             let app_id = ManuallyDrop::new(BSTR::from(""));
             let app_name = ManuallyDrop::new(BSTR::from(&self.config.app_name));
             let mut args = vec![
-                create_bstr_variant(&self.config.app_name),  // Second parameter in API
-                create_bstr_variant(""),    // First parameter in API
+                create_bstr_variant(""),             // appID (first parameter)
+                create_bstr_variant(&self.config.app_name),  // appName (second parameter)
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
