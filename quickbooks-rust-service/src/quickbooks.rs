@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use std::mem::ManuallyDrop;
 use std::ptr;
-use windows_core::{w, BSTR, HSTRING};
+use windows_core::{BSTR, HSTRING, IUnknown};
 use windows::core::{PCWSTR, PCSTR};
 use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
@@ -9,7 +9,6 @@ use windows::Win32::System::Com::{
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
 use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegOpenKeyExA, RegCloseKey};
-use std::ffi::c_void;
 use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
 
