@@ -129,6 +129,9 @@ impl QuickBooksClient {
                 create_bstr_variant(&self.config.app_name),  // App name
                 create_bstr_variant(""),                    // App ID (empty string in sample)
             ];
+            for (i, arg) in args.iter().enumerate() {
+                log::debug!("OpenConnection arg {}: BSTR", i);
+            }
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
 
@@ -157,6 +160,9 @@ impl QuickBooksClient {
                         create_bstr_variant("qbXMLModeEnter"),  // Mode (last parameter first)
                         create_bstr_variant(""),               // Empty company file (first parameter)
                     ];
+                    for (i, arg) in args.iter().enumerate() {
+                        log::debug!("BeginSession arg {}: BSTR", i);
+                    }
                     params.rgvarg = args.as_mut_ptr();
                     params.cArgs = args.len() as u32;
 
