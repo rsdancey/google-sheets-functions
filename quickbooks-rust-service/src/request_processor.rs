@@ -3,7 +3,7 @@ use std::ffi::CString;
 use std::ptr;
 use windows::core::{GUID, HSTRING, PCWSTR, PCSTR, PSTR};
 use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER};
-use windows::Win32::System::Com::{CLSIDFromProgID, CoCreateInstance, CLSCTX_ALL, IDispatch, EXCEPINFO, DISPATCH_METHOD, DISPATCH_FLAGS};
+use windows::Win32::System::Com::{CLSIDFromProgID, CoCreateInstance, CLSCTX_ALL, CLSCTX_LOCAL_SERVER, IDispatch, EXCEPINFO, DISPATCH_METHOD, DISPATCH_FLAGS};
 use windows::Win32::System::Registry::{RegOpenKeyExA, RegQueryValueExA, RegEnumKeyExA, RegCloseKey, KEY_READ};
 use windows::Win32::System::Variant::VARIANT;
 use crate::com_helpers::{create_bstr_variant, create_dispparams, create_empty_dispparams, variant_to_string};
@@ -302,11 +302,13 @@ impl RequestProcessor2 {
 
         let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
         let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
+
+        // Create the COM object
         let dispatch: IDispatch = unsafe {
             CoCreateInstance(
                 &clsid,
                 None,
-                CLSCTX_ALL
+                CLSCTX_ALL | CLSCTX_LOCAL_SERVER
             )?
         };
         log::debug!("Successfully created COM instance");
