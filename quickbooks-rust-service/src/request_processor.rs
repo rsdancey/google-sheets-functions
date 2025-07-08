@@ -89,14 +89,14 @@ impl RequestProcessor2 {
                 ) {
                     Ok(_) => {
                         log::debug!("Found registry key (HKCU): {}", path);
-                        RegCloseKey(key);
+                        let _ = RegCloseKey(key);
                     },
                     Err(e) => {
                         log::warn!("Registry key not found (HKCU): {} (error: 0x{:08X})", path, e.code().0);
                     }
                 }
             }
-            RegCloseKey(hkcu);
+            let _ = RegCloseKey(hkcu);
 
             log::info!("Checking HKEY_LOCAL_MACHINE registry paths");
             let paths = [
