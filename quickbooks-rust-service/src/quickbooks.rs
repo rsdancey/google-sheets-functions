@@ -123,7 +123,7 @@ impl QuickBooksClient {
             // Open connection
             log::debug!("Opening connection");
             // Get IDs of methods we need
-            let method_name = BSTR::from("OpenConnection");
+            let method_name = HSTRING::from("OpenConnection");
             let mut dispid = -1i32;
             let names = [PCWSTR::from_raw(method_name.as_ptr())];
             
@@ -137,11 +137,11 @@ impl QuickBooksClient {
 
             // Set up parameters exactly like sdktest.cpp
             let mut params = DISPPARAMS::default();
-            let app_id = BSTR::from("");
-            let app_name = BSTR::from(&self.config.app_name);
+            let app_id = ManuallyDrop::new(BSTR::from(""));
+            let app_name = ManuallyDrop::new(BSTR::from(&self.config.app_name));
             let mut args = vec![
-                VARIANT::from(&app_name),  // Second parameter in API
-                VARIANT::from(&app_id),    // First parameter in API
+                create_bstr_variant(&self.config.app_name),  // Second parameter in API
+                create_bstr_variant(""),    // First parameter in API
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
@@ -250,7 +250,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL)
+            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER)
                 .map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
             let mut params = DISPPARAMS::default();
