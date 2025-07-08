@@ -124,8 +124,10 @@ impl QuickBooksClient {
             // Open connection
             log::debug!("Opening connection");
             let mut params = DISPPARAMS::default();
+            // For COM, parameters are passed in reverse order
             let mut args = vec![
-                create_bstr_variant(&self.config.app_name),     // App name
+                create_bstr_variant(""),                    // App ID (empty string in sample)
+                create_bstr_variant(&self.config.app_name),  // App name
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
@@ -150,9 +152,10 @@ impl QuickBooksClient {
                     // Begin session immediately after successful connection
                     log::debug!("Beginning session");
                     let mut params = DISPPARAMS::default();
+                    // For COM, parameters are passed in reverse order
                     let mut args = vec![
-                        create_bstr_variant("") ,            // Empty company file (use currently open file)
-                        create_bstr_variant("qbXMLModeEnter"), // Mode
+                        create_bstr_variant("qbXMLModeEnter"),  // Mode (last parameter first)
+                        create_bstr_variant(""),               // Empty company file (use currently open file)
                     ];
                     params.rgvarg = args.as_mut_ptr();
                     params.cArgs = args.len() as u32;
