@@ -124,10 +124,10 @@ impl QuickBooksClient {
             // Open connection
             log::debug!("Opening connection");
             let mut params = DISPPARAMS::default();
-            // For COM, parameters are passed in reverse order
+            // NOTE: For COM calls using DISPPARAMS, parameters are in reverse order from the C++ sample
             let mut args = vec![
-                create_bstr_variant(""),                    // App ID (empty string in sample)
                 create_bstr_variant(&self.config.app_name),  // App name
+                create_bstr_variant(""),                    // App ID (empty string in sample)
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
