@@ -2,12 +2,14 @@ use anyhow::{Result, anyhow};
 use std::mem::ManuallyDrop;
 use std::ptr;
 use windows_core::{w, BSTR, HSTRING};
-use windows::core::PCWSTR;
+use windows::core::{PCWSTR, PCSTR};
 use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
     CoCreateInstance, CLSCTX_LOCAL_SERVER, CLSIDFromProgID,
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
+use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegOpenKeyExA, RegCloseKey};
+use std::ffi::c_void;
 use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
 
@@ -85,7 +87,40 @@ impl QuickBooksClient {
             };
 
             // Get CLSID with detailed error handling
-            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor");
+            // Try different ProgIDs
+            let prog_ids = [
+                "QBXMLRP2.RequestProcessor",
+                "QBXMLRP2.RequestProcessor.1",
+                "QBXMLRPLib.RequestProcessor",
+                "QBXMLRPLib.RequestProcessor.1"
+            ];
+
+            // Check registry for each ProgID
+            for prog_id_str in prog_ids {
+                log::debug!("Checking registry for ProgID: {}", prog_id_str);
+                
+                let mut hkey = HKEY::default();
+                let key_path = format!("SOFTWARE\\Classes\\{}\\CLSID", prog_id_str);
+                let key_path = key_path.to_string() + "\0";
+                let result = unsafe {
+                    RegOpenKeyExA(
+                        HKEY_LOCAL_MACHINE,
+                        PCSTR(key_path.as_ptr()),
+                        0,
+                        KEY_READ.0,
+                        &mut hkey
+                    )
+                };
+
+                if result.is_ok() {
+                    log::debug!("Found registry entry for {}", prog_id_str);
+                    unsafe { RegCloseKey(hkey); }
+                } else {
+                    log::debug!("No registry entry found for {}", prog_id_str);
+                    continue;
+                }
+
+                let prog_id = HSTRING::from(prog_id_str);
             let clsid = match CLSIDFromProgID(&prog_id) {
                 Ok(id) => id,
                 Err(e) => {
