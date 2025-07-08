@@ -125,8 +125,7 @@ impl QuickBooksClient {
             log::debug!("Opening connection");
             let mut params = DISPPARAMS::default();
             let mut args = vec![
-                create_bstr_variant(&self.config.app_id),       // First argument
-                create_bstr_variant(&self.config.app_name),     // Second argument
+                create_bstr_variant(&self.config.app_name),     // App name
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
