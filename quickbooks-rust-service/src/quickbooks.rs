@@ -158,7 +158,7 @@ impl QuickBooksClient {
                                 }
                                 Err(e) => {
                                     let code = e.code().0;
-                                    let msg = if code == 0x80040154 {
+                                    let msg = if code == 0x80040154u32 {
                                         format!(
                                             "Failed to create session manager with {} - COM class not registered (0x80040154). \
                                             This usually means either:\n\
