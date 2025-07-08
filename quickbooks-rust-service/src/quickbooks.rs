@@ -118,7 +118,7 @@ impl QuickBooksClient {
                     match CLSIDFromProgID(&prog_id) {
                         Ok(clsid) => {
                             log::debug!("Got CLSID for {}", prog_id_str);
-                            match CoCreateInstance::<IDispatch, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
+                            match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
                                 Ok(session_manager) => {
                                     log::debug!("Created session manager with {}", prog_id_str);
                                     
@@ -190,11 +190,8 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance(
-                &clsid,
-                None,
-                CLSCTX_LOCAL_SERVER
-            ).map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
+            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER)
+                .map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
             let mut params = DISPPARAMS::default();
             let mut result = VARIANT::default();
@@ -224,11 +221,8 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance(
-                &clsid,
-                None,
-                CLSCTX_LOCAL_SERVER
-            ).map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
+            let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER)
+                .map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
             let mut params = DISPPARAMS::default();
             let mut result = VARIANT::default();
@@ -259,11 +253,8 @@ impl QuickBooksClient {
                 let clsid = CLSIDFromProgID(&prog_id)
                     .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-                let session_manager: IDispatch = CoCreateInstance(
-                    &clsid,
-                    None,
-                    CLSCTX_LOCAL_SERVER
-                ).map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
+                let session_manager: IDispatch = CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER)
+                    .map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
                 let mut params = DISPPARAMS::default();
                 let mut args = vec![create_bstr_variant(&ticket)];
