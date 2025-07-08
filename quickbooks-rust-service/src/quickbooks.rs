@@ -117,7 +117,7 @@ impl QuickBooksClient {
                     match CLSIDFromProgID(&prog_id) {
                         Ok(clsid) => {
                             log::debug!("Got CLSID for {}", prog_id_str);
-                            match CoCreateInstance(&clsid, None, CLSCTX_LOCAL_SERVER) {
+                            match CoCreateInstance::cOptionc6IUnknowne, IDispatche(6clsid, None, CLSCTX_LOCAL_SERVER) {
                                 Ok(session_manager) => {
                                     log::debug!("Created session manager with {}", prog_id_str);
                                     
@@ -201,7 +201,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance(
+            let session_manager: IDispatch = CoCreateInstance::cOptionc6IUnknowne, IDispatche(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -235,7 +235,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance(
+            let session_manager: IDispatch = CoCreateInstance::cOptionc6IUnknowne, IDispatche(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -270,7 +270,7 @@ impl QuickBooksClient {
                 let clsid = CLSIDFromProgID(&prog_id)
                     .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-                let session_manager: IDispatch = CoCreateInstance(
+                let session_manager: IDispatch = CoCreateInstance::cOptionc6IUnknowne, IDispatche(
                     &clsid,
                     None,
                     CLSCTX_LOCAL_SERVER
