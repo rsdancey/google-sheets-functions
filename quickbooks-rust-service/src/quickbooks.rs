@@ -140,11 +140,12 @@ impl QuickBooksClient {
             let mut params = DISPPARAMS::default();
             let app_id = ManuallyDrop::new(BSTR::from(""));
             let app_name = ManuallyDrop::new(BSTR::from(&self.config.app_name));
+            // Parameters MUST be in exact API order: appID, then appName
             let mut args = vec![
                 create_bstr_variant(""),             // appID (first parameter)
                 create_bstr_variant(&self.config.app_name),  // appName (second parameter)
             ];
-            log::debug!("Calling Request Processor with args: appID (BSTR): {:?}, appName (BSTR): {:?}", "", &self.config.app_name);
+            log::debug!("Calling Request Processor with args in API order: appID (BSTR): {:?}, appName (BSTR): {:?}", "", &self.config.app_name);
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
 
@@ -169,10 +170,10 @@ impl QuickBooksClient {
                     log::debug!("Beginning session with company file: {}", qb_file);
                     log::debug!("COM array for BeginSession: [0]=BSTR('qbXMLModeEnter'), [1]=BSTR('')");
                     let mut params = DISPPARAMS::default();
-                    // For COM, parameters are passed in reverse order
+                    // Parameters MUST be in exact API order
                     let mut args = vec![
-                        create_bstr_variant("qbXMLModeEnter"),  // Mode (last parameter first)
-                        create_bstr_variant(""),               // Empty company file (first parameter)
+                        create_bstr_variant(""),               // Company file (first parameter)
+                        create_bstr_variant("qbXMLModeEnter"),  // Mode (second parameter)
                     ];
                     for (i, arg) in args.iter().enumerate() {
                         log::debug!("BeginSession arg {}: BSTR", i);
@@ -289,8 +290,8 @@ impl Drop for QuickBooksClient {
                 if let Some(request_processor) = self.request_processor.take() {
                     // Try to end the session
                     let mut params = DISPPARAMS::default();
-                    // For COM, parameters are passed in reverse order
-                    let mut args = vec![create_bstr_variant(&ticket)];  // Single parameter, no need to reverse
+                    // Parameters MUST be in exact API order
+                    let mut args = vec![create_bstr_variant(&ticket)];  // Single parameter
                     params.rgvarg = args.as_mut_ptr();
                     params.cArgs = args.len() as u32;
 
