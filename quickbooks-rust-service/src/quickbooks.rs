@@ -96,7 +96,7 @@ impl QuickBooksClient {
 
             // Create Request Processor exactly as in the sample
             log::debug!("Creating Request Processor");
-            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor");
+            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
             let clsid = match CLSIDFromProgID(&prog_id) {
                 Ok(clsid) => clsid,
                 Err(e) => {
@@ -137,16 +137,26 @@ impl QuickBooksClient {
                 0,
                 DISPATCH_METHOD,
                 &mut params,
-                None,  // No result needed for OpenConnection
-                None,  // No exception info needed
-                None,  // No arg error needed
+                Some(&mut result),
+                Some(&mut exc_info),
+                Some(&mut arg_err)
             ) {
                 Ok(_) => {
                     log::debug!("Successfully connected to QuickBooks");
                     Ok(())
                 }
                 Err(e) => {
-                    let msg = format!("Failed to open connection: 0x{:08X}", e.code().0);
+                    let code = e.code().0;
+                    if !exc_info.bstrDescription.is_empty() {
+                        log::error!("Exception description: {:?}", exc_info.bstrDescription);
+                    }
+                    if !exc_info.bstrSource.is_empty() {
+                        log::error!("Exception source: {:?}", exc_info.bstrSource);
+                    }
+                    if exc_info.scode != 0 {
+                        log::error!("Exception scode: 0x{:08X}", exc_info.scode);
+                    }
+                    let msg = format!("Failed to open connection: 0x{:08X}", code);
                     log::error!("{}", msg);
                     CoUninitialize();
                     Err(anyhow!(msg))
