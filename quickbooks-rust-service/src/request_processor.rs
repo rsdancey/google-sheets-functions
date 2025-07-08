@@ -1,4 +1,4 @@
-use windows::core::{HSTRING, IUnknown, PCWSTR};
+use windows::core::{HSTRING, IUnknown, PCWSTR, PCSTR};
 use windows::Win32::System::Com::{
     CLSIDFromProgID, CoCreateInstance,
     CLSCTX_LOCAL_SERVER, CLSCTX_INPROC_SERVER, CLSCTX_ALL,
@@ -31,28 +31,32 @@ impl RequestProcessor2 {
                 r"SOFTWARE\Classes\WOW6432Node\CLSID\{62989BF0-0AA7-11D4-8754-00A0C9AC7AC3}",
             ];
 
-            let hklm = RegOpenKeyExA(
+            let mut hklm = HKEY::default();
+            RegOpenKeyExA(
                 HKEY_LOCAL_MACHINE,
-                PCSTR(std::ptr::null()),
+                PCSTR::null(),
                 0,
                 KEY_READ,
+                &mut hklm
             )?;
 
             for path in paths.iter() {
                 log::debug!("Checking registry path: {}", path);
+                let mut key = HKEY::default();
                 match RegOpenKeyExA(
                     hklm,
-                    PCSTR(path.as_ptr() as *const u8),
+                    PCSTR::from_raw(path.as_ptr() as *const u8),
                     0,
                     KEY_READ,
+                    &mut key
                 ) {
-                    Ok(key) => {
+                    Ok(_) => {
                         log::debug!("Found registry key: {}", path);
                         let mut buf = [0u8; 260];
                         let mut size = buf.len() as u32;
                         if RegQueryValueExA(
-                            key,
-                            PCSTR(b"InprocServer32\0".as_ptr()),
+                            &key,
+                            PCSTR::from_raw(b"InprocServer32\0".as_ptr()),
                             None,
                             None,
                             Some(buf.as_mut_ptr() as *mut u8),
