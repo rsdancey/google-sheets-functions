@@ -62,10 +62,16 @@ impl RequestProcessor2 {
         log::info!("Starting detailed COM registration check");
         unsafe {
             let paths = [
+                // Check both naming variations
                 r"SOFTWARE\Classes\QBXMLRP2.RequestProcessor.2",
+                r"SOFTWARE\Classes\QBXMLRP2.RequestProcessor2",
                 r"SOFTWARE\Classes\WOW6432Node\QBXMLRP2.RequestProcessor.2",
+                r"SOFTWARE\Classes\WOW6432Node\QBXMLRP2.RequestProcessor2",
+                // Check both CLSIDs we've seen
                 r"SOFTWARE\Classes\CLSID\{62989BF0-0AA7-11D4-8754-00A0C9AC7AC3}",
+                r"SOFTWARE\Classes\CLSID\{71F531F5-8E67-4A7A-9161-15733FFC3206}",
                 r"SOFTWARE\Classes\WOW6432Node\CLSID\{62989BF0-0AA7-11D4-8754-00A0C9AC7AC3}",
+                r"SOFTWARE\Classes\WOW6432Node\CLSID\{71F531F5-8E67-4A7A-9161-15733FFC3206}",
             ];
 
             let mut hklm = HKEY::default();
