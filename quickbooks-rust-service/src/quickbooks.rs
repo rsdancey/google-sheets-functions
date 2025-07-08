@@ -3,8 +3,8 @@ use std::mem::ManuallyDrop;
 use windows_core::{BSTR, HSTRING, IUnknown};
 use windows::core::PCWSTR;
 use windows::Win32::System::Com::{
-    CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED,
-    CoCreateInstance, CLSCTX_ALL, CLSIDFromProgID,
+    CoInitialize, CoUninitialize,
+    CoCreateInstance, CLSCTX_LOCAL_SERVER, CLSIDFromProgID,
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
 use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
@@ -81,7 +81,7 @@ impl QuickBooksClient {
 
         unsafe {
             // Initialize COM with detailed error handling
-            match CoInitializeEx(None, COINIT_APARTMENTTHREADED) {
+            match CoInitialize(None) {
                 Ok(_) => {
                     log::debug!("COM initialized successfully");
                     self.is_com_initialized = true;
@@ -95,7 +95,7 @@ impl QuickBooksClient {
 
             // Create Request Processor exactly as in the sample
             log::debug!("Creating Request Processor");
-            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
+            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor");
             let clsid = match CLSIDFromProgID(&prog_id) {
                 Ok(clsid) => clsid,
                 Err(e) => {
@@ -107,7 +107,7 @@ impl QuickBooksClient {
             };
 
             // Create instance of Request Processor
-            let request_processor = match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
+            let request_processor = match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
                 Ok(rp) => {
                     self.request_processor = Some(rp.clone());
                     rp
@@ -122,11 +122,26 @@ impl QuickBooksClient {
 
             // Open connection
             log::debug!("Opening connection");
-            log::debug!("COM array for OpenConnection: [0]=BSTR('{}'), [1]=BSTR('{}')", &self.config.app_name, "");
+            // Get IDs of methods we need
+            let method_name = BSTR::from("OpenConnection");
+            let mut dispid = -1i32;
+            let names = [PCWSTR::from_raw(method_name.as_ptr())];
+            
+            request_processor.GetIDsOfNames(
+                &windows::core::GUID::zeroed(),
+                names.as_ptr(),
+                1,
+                0x0409, // LCID_ENGLISH_US
+                &mut dispid,
+            )?;
+
+            // Set up parameters exactly like sdktest.cpp
             let mut params = DISPPARAMS::default();
+            let app_id = BSTR::from("");
+            let app_name = BSTR::from(&self.config.app_name);
             let mut args = vec![
-                create_bstr_variant(&self.config.app_name), // app_name (second parameter)
-                create_bstr_variant(""), // app_id (first parameter)
+                VARIANT::from(&app_name),  // Second parameter in API
+                VARIANT::from(&app_id),    // First parameter in API
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
@@ -136,9 +151,9 @@ impl QuickBooksClient {
             let mut arg_err = 0;
 
             match request_processor.Invoke(
-                4,  // DISPID for OpenConnection
-                &Default::default(),
-                0,
+                dispid,
+                &windows::core::GUID::zeroed(),
+                0x0409,  // LCID_ENGLISH_US
                 DISPATCH_METHOD,
                 &mut params,
                 Some(&mut result),
