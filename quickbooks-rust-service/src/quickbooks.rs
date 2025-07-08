@@ -136,7 +136,7 @@ impl QuickBooksClient {
             let mut arg_err = 0;
 
             match request_processor.Invoke(
-                1,  // DISPID for OpenConnection2
+                4,  // DISPID for OpenConnection
                 &Default::default(),
                 0,
                 DISPATCH_METHOD,
