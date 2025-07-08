@@ -42,6 +42,48 @@ impl RequestProcessor2 {
             }
 
             // Check SDK 16.0 installation paths
+            // Try to find actual SDK registration
+            let base_paths = [
+                r"SOFTWARE\Intuit",
+                r"SOFTWARE\WOW6432Node\Intuit",
+            ];
+
+            for base_path in base_paths.iter() {
+                let mut key = HKEY::default();
+                if RegOpenKeyExA(
+                    HKEY_LOCAL_MACHINE,
+                    PCSTR::from_raw(base_path.as_bytes().as_ptr() as *const u8),
+                    0,
+                    KEY_READ,
+                    &mut key
+                ).is_ok() {
+                    log::info!("Scanning for SDK keys in: {}", base_path);
+                    let mut index = 0u32;
+                    let mut name_buf = [0u8; 260];
+                    let mut name_size = name_buf.len() as u32;
+
+                    while RegEnumKeyExA(
+                        key,
+                        index,
+                        PCSTR::from_raw(name_buf.as_mut_ptr()),
+                        &mut name_size,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ).is_ok() {
+                        if let Ok(subkey_name) = String::from_utf8(name_buf[..name_size as usize].to_vec()) {
+                            if subkey_name.contains("QBSDK") || subkey_name.contains("QuickBooks") {
+                                log::info!("Found SDK-related key: {}", subkey_name);
+                            }
+                        }
+                        index += 1;
+                        name_size = name_buf.len() as u32;
+                    }
+                    let _ = RegCloseKey(key);
+                }
+            }
+
             let sdk_paths = [
                 r"SOFTWARE\Intuit\QBSDK16.0",
                 r"SOFTWARE\WOW6432Node\Intuit\QBSDK16.0",
