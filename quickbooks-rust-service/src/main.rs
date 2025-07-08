@@ -3,18 +3,13 @@ use log::info;
 use serde::Deserialize;
 use std::env;
 
-mod quickbooks;
-use quickbooks::QuickBooksClient;
+use quickbooks_sheets_sync::{QuickBooksClient, QuickBooksConfig};
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     quickbooks: QuickBooksConfig,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct QuickBooksConfig {
-    pub app_name: String,
-}
 
 #[derive(Debug, Clone)]
 pub struct AccountData {
