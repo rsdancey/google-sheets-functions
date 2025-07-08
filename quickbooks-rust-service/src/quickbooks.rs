@@ -1,14 +1,15 @@
 use anyhow::{Result, anyhow};
 use std::mem::ManuallyDrop;
 use std::ptr;
-use windows_core::{BSTR, GUID, HSTRING};
-use windows::core::{PCWSTR, PCSTR, IUnknown};
+use windows_core::{w, BSTR, HSTRING};
+use windows::core::{PCWSTR, PCSTR};
 use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
     CoCreateInstance, CLSCTX_LOCAL_SERVER, CLSIDFromProgID,
     IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
 use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, KEY_READ, RegOpenKeyExA, RegCloseKey};
+use std::ffi::c_void;
 use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
 
@@ -117,7 +118,7 @@ impl QuickBooksClient {
                     match CLSIDFromProgID(&prog_id) {
                         Ok(clsid) => {
                             log::debug!("Got CLSID for {}", prog_id_str);
-                            match CoCreateInstance::cOptionc6IUnknowne, IDispatche(6clsid, None, CLSCTX_LOCAL_SERVER) {
+                            match CoCreateInstance::<IDispatch, IDispatch>(&clsid, None, CLSCTX_LOCAL_SERVER) {
                                 Ok(session_manager) => {
                                     log::debug!("Created session manager with {}", prog_id_str);
                                     
@@ -157,19 +158,7 @@ impl QuickBooksClient {
                                     }
                                 }
                                 Err(e) => {
-                                    let code = e.code().0;
-                                    let msg = if code == -2147221164i32 {  // REGDB_E_CLASSNOTREG (0x80040154)
-                                        format!(
-                                            "Failed to create session manager with {} - COM class not registered (0x80040154). \
-                                            This usually means either:\n\
-                                            1. QuickBooks is not installed\n\
-                                            2. QuickBooks SDK is not installed\n\
-                                            3. The SDK components are not properly registered",
-                                            prog_id_str
-                                        )
-                                    } else {
-                                        format!("Failed to create session manager with {}: 0x{:08X}", prog_id_str, code)
-                                    };
+                                    let msg = format!("Failed to create session manager with {}: 0x{:08X}", prog_id_str, e.code().0);
                                     log::warn!("{}", msg);
                                     last_error = Some(msg);
                                 }
@@ -201,7 +190,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::cOptionc6IUnknowne, IDispatche(
+            let session_manager: IDispatch = CoCreateInstance(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -235,7 +224,7 @@ impl QuickBooksClient {
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-            let session_manager: IDispatch = CoCreateInstance::cOptionc6IUnknowne, IDispatche(
+            let session_manager: IDispatch = CoCreateInstance(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
@@ -270,7 +259,7 @@ impl QuickBooksClient {
                 let clsid = CLSIDFromProgID(&prog_id)
                     .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
-                let session_manager: IDispatch = CoCreateInstance::cOptionc6IUnknowne, IDispatche(
+                let session_manager: IDispatch = CoCreateInstance(
                     &clsid,
                     None,
                     CLSCTX_LOCAL_SERVER
