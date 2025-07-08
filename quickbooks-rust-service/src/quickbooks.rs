@@ -30,26 +30,40 @@ impl QuickBooksClient {
 
     pub fn is_quickbooks_running(&self) -> bool {
         unsafe {
-            let window_class = w!("QBPOS:WndClass");
-            let window = FindWindowW(window_class, PCWSTR::null());
+            // Try various known QuickBooks window classes
+            let window_classes = [
+                "QBPOS:WndClass",       // POS version
+                "QBPosWindow",          // POS alternative
+                "QuickBooks:WndClass",  // Desktop version
+                "QBHLPR:WndClass",      // Helper window
+                "QBHelperWndClass",     // Alternative helper
+                "QuickBooksWindows",    // Multi-user mode
+            ];
 
-            if window.0 != 0 {
+            for class_name in window_classes {
+                let window = FindWindowW(w!(class_name), PCWSTR::null());
+                if window.0 != 0 {
+                    let mut process_id = 0u32;
+                    GetWindowThreadProcessId(window, Some(&mut process_id));
+                    if process_id != 0 {
+                        log::debug!("Found QuickBooks window with class: {}", class_name);
+                        return true;
+                    }
+                }
+            }
+
+            // Also check for the database manager which runs in multi-user mode
+            let db_window = FindWindowW(w!("QBDBMgrWindow"), PCWSTR::null());
+            if db_window.0 != 0 {
                 let mut process_id = 0u32;
-                GetWindowThreadProcessId(window, Some(&mut process_id));
+                GetWindowThreadProcessId(db_window, Some(&mut process_id));
                 if process_id != 0 {
+                    log::debug!("Found QuickBooks Database Manager window");
                     return true;
                 }
             }
 
-            let window_class = w!("QBPosWindow");
-            let window = FindWindowW(window_class, PCWSTR::null());
-
-            if window.0 != 0 {
-                let mut process_id = 0u32;
-                GetWindowThreadProcessId(window, Some(&mut process_id));
-                return process_id != 0;
-            }
-
+            log::warn!("No QuickBooks windows found. Checked classes: {:?}", window_classes);
             false
         }
     }
