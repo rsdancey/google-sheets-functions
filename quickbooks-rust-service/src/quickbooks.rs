@@ -246,7 +246,8 @@ impl QuickBooksClient {
 
     pub fn get_company_file_name(&mut self) -> Result<String> {
         unsafe {
-            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
+            // Use QBXMLRP2.RequestProcessor.2 as shown in Windows registry for 64-bit QuickBooks Enterprise v24
+            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
 
