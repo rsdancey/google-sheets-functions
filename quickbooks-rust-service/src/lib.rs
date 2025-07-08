@@ -107,21 +107,42 @@ impl QuickBooksClient {
     pub fn connect(&mut self, qb_file: &str) -> Result<()> {
         log::debug!("Attempting to connect to QuickBooks");
 
+        // Check if QuickBooks is running
+        if !self.is_quickbooks_running() {
+            return Err(anyhow!("QuickBooks is not running. Please start QuickBooks and open a company file."));
+        }
+        log::debug!("QuickBooks is running");
+
         // Initialize COM
-        unsafe { CoInitialize(None)? };
+        unsafe { 
+            CoInitialize(None)
+                .map_err(|e| anyhow!("Failed to initialize COM: {} (0x{:08X})", e, e.code().0))? 
+        };
         self.is_com_initialized = true;
+        log::debug!("COM initialized successfully");
 
         // Create request processor
         let request_processor = RequestProcessor2::new()
-            .map_err(|e| anyhow!("Failed to create request processor: {:?}", e))?;
+            .map_err(|e| anyhow!("Failed to create request processor: {} (0x{:08X})", e, e.code().0))?;
+        log::debug!("Request processor created successfully");
 
         // Open connection
         request_processor.open_connection("", &self.config.app_name)
-            .map_err(|e| anyhow!("Failed to open connection: {:?}", e))?;
+            .map_err(|e| {
+                log::error!("Failed to open connection - error code: 0x{:08X}", e.code().0);
+                log::error!("Error message: {}", e.message());
+                anyhow!("Failed to open connection: {} (0x{:08X})", e, e.code().0)
+            })?;
+        log::debug!("Connection opened successfully");
 
         // Begin session
         let ticket = request_processor.begin_session(qb_file, self.file_mode.clone())
-            .map_err(|e| anyhow!("Failed to begin session: {:?}", e))?;
+            .map_err(|e| {
+                log::error!("Failed to begin session - error code: 0x{:08X}", e.code().0);
+                log::error!("Error message: {}", e.message());
+                anyhow!("Failed to begin session: {} (0x{:08X})", e, e.code().0)
+            })?;
+        log::debug!("Session started successfully");
 
         self.session_ticket = Some(ticket);
         self.request_processor = Some(request_processor);
