@@ -90,7 +90,7 @@ fn print_help() {
     println!("    4. Shows success/failure and next steps");
     println!();
     println!("BASED ON:");
-    println!("    Official Intuit C++ SDK sample patterns (sdktest.cpp)");
+    println!("    Official Intuit SDK sample patterns (SDKTestPlus3.vb)");
 }
 
 fn main() -> Result<()> {
