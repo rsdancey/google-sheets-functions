@@ -326,7 +326,17 @@ impl Drop for QuickBooksClient {
 
 fn create_bstr_variant(s: &str) -> VARIANT {
     let bstr = BSTR::from(s);
-    VARIANT::from(&bstr)
+    unsafe {
+        let mut variant = VARIANT::default();
+        let var_union_ptr = ptr::addr_of_mut!(variant.Anonymous);
+        let var_union2_ptr = ptr::addr_of_mut!((*var_union_ptr).Anonymous);
+        let var_union3_ptr = ptr::addr_of_mut!((*var_union2_ptr).Anonymous);
+        
+        (*var_union2_ptr).vt = VARENUM(VT_BSTR.0);
+        (*var_union3_ptr).bstrVal = bstr;
+        
+        variant
+    }
 }
 
 fn variant_to_string(variant: &VARIANT) -> Result<String> {
