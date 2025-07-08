@@ -126,13 +126,8 @@ fn main() -> Result<()> {
     // Create QuickBooks client
     let mut qb = QuickBooksClient::new(&config.quickbooks)?;
 
-    // Check if QuickBooks is running
-    if !qb.is_quickbooks_running() {
-        info!("QuickBooks is not running!");
-        return Ok(());
-    }
-
     // Connect to QuickBooks
+    info!("Attempting to connect to QuickBooks...");
     qb.connect()?;
     info!("Connected to QuickBooks");
 
