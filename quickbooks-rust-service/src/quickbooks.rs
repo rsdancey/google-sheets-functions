@@ -69,10 +69,9 @@ impl QuickBooksClient {
         }
     }
 
-pub fn connect(&mut self) -> Result<()> {
-        if !self.is_quickbooks_running() {
-            return Err(anyhow!("ERROR: QuickBooks is not running. Please start QuickBooks and open a company file."));
-        }
+    pub fn connect(&mut self) -> Result<()> {
+        // Assume QuickBooks is running
+        log::debug!("Attempting to connect to QuickBooks");
 
         unsafe {
             // Initialize COM with detailed error handling
