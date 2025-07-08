@@ -95,7 +95,7 @@ impl QuickBooksClient {
 
             // Create Request Processor exactly as in the sample
             log::debug!("Creating Request Processor");
-            let prog_id = HSTRING::from("QBXMLRPLib.RequestProcessor");
+            let prog_id = HSTRING::from("QBXMLRP.RequestProcessor");
             let clsid = match CLSIDFromProgID(&prog_id) {
                 Ok(clsid) => clsid,
                 Err(e) => {
