@@ -40,7 +40,7 @@ impl Config {
 }
 
 fn print_instructions() {
-    println!("QuickBooks Desktop Integration Service v1.7");
+    println!("QuickBooks Desktop Integration Service v1.8");
     println!("==========================================");
     println!();
     println!("Prerequisites before running this service:");
