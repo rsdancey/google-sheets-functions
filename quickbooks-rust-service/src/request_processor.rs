@@ -4,6 +4,8 @@ use windows::Win32::System::Com::{
     CLSCTX_LOCAL_SERVER, CLSCTX_INPROC_SERVER, CLSCTX_ALL,
     IDispatch, DISPATCH_METHOD, EXCEPINFO,
 };
+use windows::Win32::System::Registry::*;
+use std::path::Path;
 use windows::Win32::System::Variant::VARIANT;
 use crate::com_helpers::{create_bstr_variant, create_dispparams, create_empty_dispparams, variant_to_string};
 use crate::FileMode;
@@ -20,7 +22,64 @@ pub struct RequestProcessor2 {
 }
 
 impl RequestProcessor2 {
+    fn check_registry_paths() -> windows::core::Result<()> {
+        unsafe {
+            let paths = [
+                r"SOFTWARE\Classes\QBXMLRP2.RequestProcessor.2",
+                r"SOFTWARE\Classes\WOW6432Node\QBXMLRP2.RequestProcessor.2",
+                r"SOFTWARE\Classes\CLSID\{62989BF0-0AA7-11D4-8754-00A0C9AC7AC3}",
+                r"SOFTWARE\Classes\WOW6432Node\CLSID\{62989BF0-0AA7-11D4-8754-00A0C9AC7AC3}",
+            ];
+
+            let hklm = RegOpenKeyExA(
+                HKEY_LOCAL_MACHINE,
+                PCSTR(std::ptr::null()),
+                0,
+                KEY_READ,
+            )?;
+
+            for path in paths.iter() {
+                log::debug!("Checking registry path: {}", path);
+                match RegOpenKeyExA(
+                    hklm,
+                    PCSTR(path.as_ptr() as *const u8),
+                    0,
+                    KEY_READ,
+                ) {
+                    Ok(key) => {
+                        log::debug!("Found registry key: {}", path);
+                        let mut buf = [0u8; 260];
+                        let mut size = buf.len() as u32;
+                        if RegQueryValueExA(
+                            key,
+                            PCSTR(b"InprocServer32\0".as_ptr()),
+                            None,
+                            None,
+                            Some(buf.as_mut_ptr() as *mut u8),
+                            Some(&mut size),
+                        ).is_ok() {
+                            if let Ok(path) = String::from_utf8(buf[..size as usize].to_vec()) {
+                                log::debug!("DLL path: {}", path);
+                                if let Some(path) = Path::new(&path).parent() {
+                                    log::debug!("DLL directory exists: {}", path.exists());
+                                }
+                            }
+                        }
+                        RegCloseKey(key);
+                    },
+                    Err(e) => {
+                        log::warn!("Registry key not found: {} (error: 0x{:08X})", path, e.code().0);
+                    }
+                }
+            }
+            RegCloseKey(hklm);
+        }
+        Ok(())
+    }
+
     pub fn new() -> windows::core::Result<Self> {
+        Self::check_registry_paths()?;
+
         let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
         log::debug!("Attempting to get CLSID for ProgID: {}", prog_id);
         let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
