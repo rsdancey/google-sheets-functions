@@ -45,16 +45,16 @@ impl Config {
 }
 
 fn print_instructions() {
-    println!("🔧 QuickBooks Desktop Integration Service v1");
+    println!("QuickBooks Desktop Integration Service v1.1");
     println!("==========================================");
     println!();
-    println!("📋 Prerequisites before running this service:");
+    println!("Prerequisites before running this service:");
     println!("   1. QuickBooks Desktop must be installed");
     println!("   2. QuickBooks Desktop must be RUNNING");
     println!("   3. A company file must be OPEN in QuickBooks");
     println!("   4. QuickBooks should be in a ready state (not processing anything)");
     println!();
-    println!("⚠️ If you see 'Session manager functionality test failed', please:");
+    println!("If you see 'Session manager functionality test failed', please:");
     println!("   • Open QuickBooks Desktop");
     println!("   • Open a company file");
     println!("   • Wait for QuickBooks to finish loading completely");
