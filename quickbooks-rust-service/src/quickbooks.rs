@@ -54,24 +54,89 @@ impl QuickBooksClient {
         }
     }
 
-    pub fn connect(&mut self) -> Result<()> {
+pub fn connect(&mut self) -> Result<()> {
         if !self.is_quickbooks_running() {
-            return Err(anyhow!("QuickBooks is not running"));
+            return Err(anyhow!("ERROR: QuickBooks is not running. Please start QuickBooks and open a company file."));
         }
 
         unsafe {
+            // Initialize COM with detailed error handling
+            match CoInitializeEx(None, COINIT_MULTITHREADED) {
+                Ok(_) => log::debug!("COM initialized successfully"),
+                Err(e) => {
+                    let error_msg = format!("COM initialization failed with error code 0x{:08X}", e.code().0);
+                    log::error!("{}", error_msg);
+                    return Err(anyhow!(error_msg));
+                }
+            };
+
+            // Get CLSID with detailed error handling
+            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
+            let clsid = match CLSIDFromProgID(&prog_id) {
+                Ok(id) => id,
+                Err(e) => {
+                    let error_msg = format!(
+                        "Failed to get CLSID for QBXMLRP2.RequestProcessor.1. Error: 0x{:08X}. \
+                        This usually means the QuickBooks SDK is not properly installed or registered.",
+                        e.code().0
+                    );
+                    log::error!("{}", error_msg);
+                    CoUninitialize();
+                    return Err(anyhow!(error_msg));
+                }
+            };
+
+            // Create instance with detailed error handling
+            let session_manager: IDispatch = match CoCreateInstance(
+                &clsid,
+                None,
+                CLSCTX_LOCAL_SERVER
+            ) {
+                Ok(instance) => instance,
+                Err(e) => {
+                    let error_msg = format!(
+                        "Failed to create QuickBooks session manager. Error: 0x{:08X}. \
+                        This could mean QuickBooks is not running or the SDK components are not registered.",
+                        e.code().0
+                    );
+                    log::error!("{}", error_msg);
+                    CoUninitialize();
+                    return Err(anyhow!(error_msg));
+                }
+            };
             CoInitializeEx(None, COINIT_MULTITHREADED)
                 .map_err(|e| anyhow!("Failed to initialize COM: {:?}", e))?;
 
             let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
-            let clsid = CLSIDFromProgID(&prog_id)
-                .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
+            let clsid = match CLSIDFromProgID(&prog_id) {
+                Ok(id) => id,
+                Err(e) => {
+                    let error_msg = format!(
+                        "Failed to get CLSID for session initialization. Error: 0x{:08X}. \
+                        The QuickBooks SDK components may not be properly registered.",
+                        e.code().0
+                    );
+                    log::error!("{}", error_msg);
+                    return Err(anyhow!(error_msg));
+                }
+            };
 
-            let session_manager: IDispatch = CoCreateInstance(
+            let session_manager: IDispatch = match CoCreateInstance(
                 &clsid,
                 None,
                 CLSCTX_LOCAL_SERVER
-            ).map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
+            ) {
+                Ok(instance) => instance,
+                Err(e) => {
+                    let error_msg = format!(
+                        "Failed to create session manager for BeginSession. Error: 0x{:08X}. \
+                        Check if QuickBooks is running and accessible.",
+                        e.code().0
+                    );
+                    log::error!("{}", error_msg);
+                    return Err(anyhow!(error_msg));
+                }
+            };
 
             let mut params = DISPPARAMS::default();
             let mut args = vec![
@@ -100,8 +165,9 @@ impl QuickBooksClient {
         }
     }
 
-    pub fn begin_session(&mut self) -> Result<()> {
+pub fn begin_session(&mut self) -> Result<()> {
         unsafe {
+            log::debug!("Starting QuickBooks session");
             let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;

@@ -83,6 +83,10 @@ fn print_help() {
 }
 
 fn main() -> Result<()> {
+    // Enable error backtrace if requested
+    if env::var("RUST_BACKTRACE").is_err() {
+        env::set_var("RUST_BACKTRACE", "1");
+    }
     // Initialize logging
     let args: Vec<String> = env::args().collect();
     let verbose = args.contains(&"--verbose".to_string()) || args.contains(&"-v".to_string());
