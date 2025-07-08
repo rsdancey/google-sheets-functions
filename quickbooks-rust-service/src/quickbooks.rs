@@ -32,16 +32,16 @@ impl QuickBooksClient {
         unsafe {
             // Try various known QuickBooks window classes
             let window_classes = [
-                "QBPOS:WndClass",       // POS version
-                "QBPosWindow",          // POS alternative
-                "QuickBooks:WndClass",  // Desktop version
-                "QBHLPR:WndClass",      // Helper window
-                "QBHelperWndClass",     // Alternative helper
-                "QuickBooksWindows",    // Multi-user mode
+                HSTRING::from("QBPOS:WndClass"),       // POS version
+                HSTRING::from("QBPosWindow"),          // POS alternative
+                HSTRING::from("QuickBooks:WndClass"),  // Desktop version
+                HSTRING::from("QBHLPR:WndClass"),      // Helper window
+                HSTRING::from("QBHelperWndClass"),     // Alternative helper
+                HSTRING::from("QuickBooksWindows"),    // Multi-user mode
             ];
 
-            for class_name in window_classes {
-                let window = FindWindowW(w!(class_name), PCWSTR::null());
+            for class_name in window_classes.iter() {
+                let window = FindWindowW(PCWSTR::from_raw(class_name.as_ptr()), PCWSTR::null());
                 if window.0 != 0 {
                     let mut process_id = 0u32;
                     GetWindowThreadProcessId(window, Some(&mut process_id));
@@ -53,7 +53,8 @@ impl QuickBooksClient {
             }
 
             // Also check for the database manager which runs in multi-user mode
-            let db_window = FindWindowW(w!("QBDBMgrWindow"), PCWSTR::null());
+            let db_class = HSTRING::from("QBDBMgrWindow");
+            let db_window = FindWindowW(PCWSTR::from_raw(db_class.as_ptr()), PCWSTR::null());
             if db_window.0 != 0 {
                 let mut process_id = 0u32;
                 GetWindowThreadProcessId(db_window, Some(&mut process_id));
