@@ -123,11 +123,11 @@ impl QuickBooksClient {
 
             // Open connection
             log::debug!("Opening connection");
-            log::debug!("COM array for OpenConnection: [0]=BSTR('{}'), [1]=BSTR('')", self.config.app_name);
+            log::debug!("COM array for OpenConnection: [0]=BSTR('{}'), [1]=BSTR('')", "", self.config.app_name);
             let mut params = DISPPARAMS::default();
             let mut args = vec![
-                create_bstr_variant(""), // appID (first parameter)
                 create_bstr_variant(&self.config.app_name), // appName (second parameter)
+                create_bstr_variant(""), // appID (first parameter)
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
