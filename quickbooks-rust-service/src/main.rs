@@ -128,12 +128,8 @@ fn main() -> Result<()> {
 
     // Connect to QuickBooks
     info!("Attempting to connect to QuickBooks...");
-    qb.connect()?;
-    info!("Connected to QuickBooks");
-
-    // Start a session
-    qb.begin_session("")?;  // Empty string means use currently open company file
-    info!("Session started");
+    qb.connect("")?;  // Empty string means use currently open company file
+    info!("Connected to QuickBooks and started session");
 
     // Get company file
     let company_file = qb.get_company_file_name()?;

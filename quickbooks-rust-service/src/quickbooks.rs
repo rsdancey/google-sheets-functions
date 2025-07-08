@@ -76,7 +76,7 @@ impl QuickBooksClient {
         }
     }
 
-    pub fn connect(&mut self) -> Result<()> {
+    pub fn connect(&mut self, qb_file: &str) -> Result<()> {
         // Assume QuickBooks is running
         log::debug!("Attempting to connect to QuickBooks");
 
@@ -131,6 +131,10 @@ impl QuickBooksClient {
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
 
+            let mut result = VARIANT::default();
+            let mut exc_info = EXCEPINFO::default();
+            let mut arg_err = 0;
+
             match request_processor.Invoke(
                 1,  // DISPID for OpenConnection2
                 &Default::default(),
@@ -139,11 +143,65 @@ impl QuickBooksClient {
                 &mut params,
                 Some(&mut result),
                 Some(&mut exc_info),
-                Some(&mut arg_err)
+                Some(&mut arg_err),
             ) {
                 Ok(_) => {
-                    log::debug!("Successfully connected to QuickBooks");
-                    Ok(())
+                    log::debug!("Successfully opened connection");
+
+                    // Begin session immediately after successful connection
+                    log::debug!("Beginning session");
+                    let mut params = DISPPARAMS::default();
+                    let mut args = vec![
+                        create_bstr_variant(""),  // ticket will be returned
+                        create_bstr_variant(qb_file),
+                    ];
+                    params.rgvarg = args.as_mut_ptr();
+                    params.cArgs = args.len() as u32;
+
+                    let mut result = VARIANT::default();
+                    let mut exc_info = EXCEPINFO::default();
+                    let mut arg_err = 0;
+
+                    match request_processor.Invoke(
+                        2,  // DISPID for BeginSession
+                        &Default::default(),
+                        0,
+                        DISPATCH_METHOD,
+                        &mut params,
+                        Some(&mut result),
+                        Some(&mut exc_info),
+                        Some(&mut arg_err),
+                    ) {
+                        Ok(_) => {
+                            // Store the session ticket
+                            if let Ok(ticket) = variant_to_string(&result) {
+                                self.session_ticket = Some(ticket);
+                                log::debug!("Successfully started session");
+                                Ok(())
+                            } else {
+                                let msg = "Failed to get session ticket";
+                                log::error!("{}", msg);
+                                CoUninitialize();
+                                Err(anyhow!(msg))
+                            }
+                        }
+                        Err(e) => {
+                            let code = e.code().0;
+                            if !exc_info.bstrDescription.is_empty() {
+                                log::error!("Exception description: {:?}", exc_info.bstrDescription);
+                            }
+                            if !exc_info.bstrSource.is_empty() {
+                                log::error!("Exception source: {:?}", exc_info.bstrSource);
+                            }
+                            if exc_info.scode != 0 {
+                                log::error!("Exception scode: 0x{:08X}", exc_info.scode);
+                            }
+                            let msg = format!("Failed to begin session: 0x{:08X}", code);
+                            log::error!("{}", msg);
+                            CoUninitialize();
+                            Err(anyhow!(msg))
+                        }
+                    }
                 }
                 Err(e) => {
                     let code = e.code().0;
