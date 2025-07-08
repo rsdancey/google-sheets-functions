@@ -1,7 +1,7 @@
-use anyhow::Result;
-use log::info;
+use anyhow::{Result, Context};
+use log::{error, info};
 use serde::Deserialize;
-use std::fs;
+use std::env;
 
 mod quickbooks;
 use quickbooks::QuickBooksClient;
@@ -15,191 +15,6 @@ pub struct Config {
 pub struct QuickBooksConfig {
     app_id: String,
     app_name: String,
-}
-
-fn main() -> Result<()> {
-    // Initialize logging
-    env_logger::init();
-
-    // Load configuration
-    let config_str = fs::read_to_string("config.json")?;
-    let config: Config = serde_json::from_str(&config_str)?;
-
-    // Create QuickBooks client
-    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
-
-    // Check if QuickBooks is running
-    if !qb.is_quickbooks_running() {
-        info!("QuickBooks is not running!");
-        return Ok(());
-    }
-
-    // Connect to QuickBooks
-    qb.connect()?;
-    info!("Connected to QuickBooks");
-
-    // Start a session
-    qb.begin_session()?;
-    info!("Session started");
-
-    // Get company file
-    let company_file = qb.get_company_file_name()?;
-    info!("Current company file: {}", company_file);
-
-    Ok(())
-}
-
-use anyhow::Result;
-use log::info;
-use serde::Deserialize;
-use std::fs;
-
-mod quickbooks;
-use quickbooks::QuickBooksClient;
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    quickbooks: QuickBooksConfig,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct QuickBooksConfig {
-    app_id: String,
-    app_name: String,
-}
-
-fn main() -> Result<()> {
-    // Initialize logging
-    env_logger::init();
-
-    // Load configuration
-    let config_str = fs::read_to_string("config.json")?;
-    let config: Config = serde_json::from_str(&config_str)?;
-
-    // Create QuickBooks client
-    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
-
-    // Check if QuickBooks is running
-    if !qb.is_quickbooks_running() {
-        info!("QuickBooks is not running!");
-        return Ok(());
-    }
-
-    // Connect to QuickBooks
-    qb.connect()?;
-    info!("Connected to QuickBooks");
-
-    // Start a session
-    qb.begin_session()?;
-    info!("Session started");
-
-    // Get company file
-    let company_file = qb.get_company_file_name()?;
-    info!("Current company file: {}", company_file);
-
-    Ok(())
-}
-
-use anyhow::Result;
-use log::info;
-use serde::Deserialize;
-use std::fs;
-
-mod quickbooks;
-use quickbooks::QuickBooksClient;
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    quickbooks: QuickBooksConfig,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct QuickBooksConfig {
-    app_id: String,
-    app_name: String,
-}
-
-fn main() -> Result<()> {
-    // Initialize logging
-    env_logger::init();
-
-    // Load configuration
-    let config_str = fs::read_to_string("config.json")?;
-    let config: Config = serde_json::from_str(&config_str)?;
-
-    // Create QuickBooks client
-    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
-
-    // Check if QuickBooks is running
-    if !qb.is_quickbooks_running() {
-        info!("QuickBooks is not running!");
-        return Ok(());
-    }
-
-    // Connect to QuickBooks
-    qb.connect()?;
-    info!("Connected to QuickBooks");
-
-    // Start a session
-    qb.begin_session()?;
-    info!("Session started");
-
-    // Get company file
-    let company_file = qb.get_company_file_name()?;
-    info!("Current company file: {}", company_file);
-
-    Ok(())
-}
-
-use anyhow::Result;
-use log::info;
-use serde::Deserialize;
-use std::fs;
-
-mod quickbooks;
-use quickbooks::QuickBooksClient;
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    quickbooks: QuickBooksConfig,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct QuickBooksConfig {
-    app_id: String,
-    app_name: String,
-}
-
-fn main() -> Result<()> {
-    // Initialize logging
-    env_logger::init();
-
-    // Load configuration
-    let config_str = fs::read_to_string("config.json")?;
-    let config: Config = serde_json::from_str(&config_str)?;
-
-    // Create QuickBooks client
-    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
-
-    // Check if QuickBooks is running
-    if !qb.is_quickbooks_running() {
-        info!("QuickBooks is not running!");
-        return Ok(());
-    }
-
-    // Connect to QuickBooks
-    qb.connect()?;
-    info!("Connected to QuickBooks");
-
-    // Start a session
-    qb.begin_session()?;
-    info!("Session started");
-
-    // Get company file
-    let company_file = qb.get_company_file_name()?;
-    info!("Current company file: {}", company_file);
-
-    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -209,6 +24,13 @@ pub struct AccountData {
     pub account_type: String,
     pub balance: f64,
     pub description: Option<String>,
+}
+
+impl Config {
+    fn load() -> Result<Self> {
+        let config_str = std::fs::read_to_string("config.json")?;
+        Ok(serde_json::from_str(&config_str)?)
+    }
 }
 
 fn print_instructions() {
@@ -221,7 +43,7 @@ fn print_instructions() {
     println!("   3. A company file must be OPEN in QuickBooks");
     println!("   4. QuickBooks should be in a ready state (not processing anything)");
     println!();
-    println!("⚠️  If you see 'Session manager functionality test failed', please:");
+    println!("⚠️ If you see 'Session manager functionality test failed', please:");
     println!("   • Open QuickBooks Desktop");
     println!("   • Open a company file");
     println!("   • Wait for QuickBooks to finish loading completely");
@@ -229,89 +51,6 @@ fn print_instructions() {
     println!();
     println!("Starting QuickBooks integration test...");
     println!("========================================");
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Initialize logging
-    let args: Vec<String> = env::args().collect();
-    let verbose = args.contains(&"--verbose".to_string()) || args.contains(&"-v".to_string());
-    
-    if verbose {
-        env_logger::builder()
-            .filter_level(log::LevelFilter::Debug)
-            .init();
-    } else {
-        env_logger::init();
-    }
-
-    // Show help if requested
-    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        print_help();
-        return Ok(());
-    }
-
-    print_instructions();
-    
-    // Load configuration
-    let config = Config::load()
-        .context("Failed to load configuration")?;
-
-    // Initialize QuickBooks client
-    let qb_client = QuickBooksClient::new(&config.quickbooks)
-        .context("Failed to initialize QuickBooks client")?;
-
-    // Test 1: Check if QuickBooks SDK is available
-    info!("📋 Step 1: Testing QuickBooks SDK availability...");
-    qb_client.test_connection().await
-        .context("QuickBooks SDK test failed")?;
-
-    // Test 2: Attempt to register with QuickBooks
-    info!("📋 Step 2: Attempting to connect and register with QuickBooks...");
-    match qb_client.register_with_quickbooks().await {
-        Ok(()) => {
-            info!("🎉 SUCCESS! Application connected and registered with QuickBooks.");
-            
-            // Test 3: Test XML processing (account data retrieval)
-            info!("🗒️ Step 3: Testing XML processing (account data retrieval)...");
-            match qb_client.test_account_data_retrieval().await {
-                Ok(xml_response) => {
-                    info!("✅ Account data retrieval successful!");
-                    info!("📄 XML Response received ({} characters)", xml_response.len());
-                    
-                    // Show first 500 characters of response for debugging
-                    if xml_response.len() > 500 {
-                        info!("📋 Response preview: {}...", &xml_response[..500]);
-                    } else {
-                        info!("📋 Full response: {}", xml_response);
-                    }
-                }
-                Err(e) => {
-                    error!("❌ Account data retrieval failed: {}", e);
-                    info!("💡 This may be expected if:");
-                    info!("   1. Company file has no accounts");
-                    info!("   2. Permissions are restricted");
-                    info!("   3. QBXML version incompatibility");
-                }
-            }
-            
-            info!("📝 Next steps:");
-            info!("   1. QuickBooks should have shown an authorization dialog");
-            info!("   2. The application is now registered and can connect");
-            info!("   3. Account data retrieval has been tested");
-        }
-        Err(e) => {
-            error!("❌ Connection and registration failed: {}", e);
-            info!("💡 Troubleshooting tips:");
-            info!("   1. Make sure QuickBooks Desktop is running");
-            info!("   2. Make sure a company file is open");
-            info!("   3. QuickBooks may show an authorization dialog - approve it");
-            info!("   4. Try running QuickBooks as Administrator");
-            return Err(e);
-        }
-    };
-
-    Ok(())
 }
 
 fn print_help() {
@@ -341,4 +80,53 @@ fn print_help() {
     println!();
     println!("BASED ON:");
     println!("    Official Intuit C++ SDK sample patterns (sdktest.cpp)");
+}
+
+fn main() -> Result<()> {
+    // Initialize logging
+    let args: Vec<String> = env::args().collect();
+    let verbose = args.contains(&"--verbose".to_string()) || args.contains(&"-v".to_string());
+
+    if verbose {
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Debug)
+            .init();
+    } else {
+        env_logger::init();
+    }
+
+    // Show help if requested
+    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
+        print_help();
+        return Ok(());
+    }
+
+    print_instructions();
+
+    // Load configuration
+    let config = Config::load()
+        .context("Failed to load configuration")?;
+
+    // Create QuickBooks client
+    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
+
+    // Check if QuickBooks is running
+    if !qb.is_quickbooks_running() {
+        info!("QuickBooks is not running!");
+        return Ok(());
+    }
+
+    // Connect to QuickBooks
+    qb.connect()?;
+    info!("Connected to QuickBooks");
+
+    // Start a session
+    qb.begin_session()?;
+    info!("Session started");
+
+    // Get company file
+    let company_file = qb.get_company_file_name()?;
+    info!("Current company file: {}", company_file);
+
+    Ok(())
 }

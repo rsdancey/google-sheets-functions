@@ -1,18 +1,18 @@
-use anyhow::{Result, anyhow};
-use std::mem::ManuallyDrop;
 use std::ptr;
-use windows_core::{w, BSTR, HSTRING};
-use windows::core::PCWSTR;
+use anyhow::{Result, anyhow};
+use log::{info, error};
+use windows::core::{PCWSTR, HSTRING, BSTR};
+use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
     CoCreateInstance, CLSCTX_LOCAL_SERVER, CLSIDFromProgID,
-    IDispatch, DISPPARAMS, EXCEPINFO, DISPATCH_METHOD,
 };
-use windows::Win32::System::Variant::{VARIANT, VARENUM, VT_BSTR};
+use windows::Win32::System::Ole::{IDispatch, DISPPARAMS};
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, GetWindowThreadProcessId};
 
-use crate::QuickBooksConfig;
+use crate::config::QuickBooksConfig;
 
+#[derive(Debug)]
 pub struct QuickBooksClient {
     config: QuickBooksConfig,
     session_ticket: Option<String>,
@@ -28,23 +28,29 @@ impl QuickBooksClient {
         })
     }
 
+    #[cfg(windows)]
     pub fn is_quickbooks_running(&self) -> bool {
         unsafe {
-            let window_class = w!("QBPOS:WndClass");
-            let window = FindWindowW(window_class, PCWSTR::null());
-
-            if window.0 != 0 {
+            let window = FindWindowW(
+                w!("QBPOS:WndClass"),
+                PCWSTR::null(),
+            ).unwrap_or(HWND(ptr::null_mut()));
+            
+            if !window.is_invalid() {
                 let mut process_id = 0u32;
                 GetWindowThreadProcessId(window, Some(&mut process_id));
                 if process_id != 0 {
                     return true;
                 }
             }
-
-            let window_class = w!("QBPosWindow");
-            let window = FindWindowW(window_class, PCWSTR::null());
-
-            if window.0 != 0 {
+            
+            // Try standard QuickBooks Desktop window class
+            let window = FindWindowW(
+                w!("QBPosWindow"),
+                PCWSTR::null(),
+            ).unwrap_or(HWND(ptr::null_mut()));
+            
+            if !window.is_invalid() {
                 let mut process_id = 0u32;
                 GetWindowThreadProcessId(window, Some(&mut process_id));
                 return process_id != 0;
@@ -54,15 +60,18 @@ impl QuickBooksClient {
         }
     }
 
+    #[cfg(windows)]
     pub fn connect(&mut self) -> Result<()> {
         if !self.is_quickbooks_running() {
             return Err(anyhow!("QuickBooks is not running"));
         }
 
         unsafe {
+            // Initialize COM
             CoInitializeEx(None, COINIT_MULTITHREADED)
                 .map_err(|e| anyhow!("Failed to initialize COM: {:?}", e))?;
 
+            // Create session manager instance
             let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
             let clsid = CLSIDFromProgID(&prog_id)
                 .map_err(|e| anyhow!("Failed to get CLSID: {:?}", e))?;
@@ -73,33 +82,24 @@ impl QuickBooksClient {
                 CLSCTX_LOCAL_SERVER
             ).map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
+            // Call OpenConnection2
             let mut params = DISPPARAMS::default();
-            let mut args = vec![
-                create_bstr_variant(&self.config.app_id),
-                create_bstr_variant(&self.config.app_name),
-            ];
-            params.rgvarg = args.as_mut_ptr();
-            params.cArgs = args.len() as u32;
-
-            let mut result = VARIANT::default();
-            let mut exc_info = EXCEPINFO::default();
-            let mut arg_err = 0u32;
-
             session_manager.Invoke(
-                1,  // DISPID for OpenConnection2
-                &Default::default(),  // GUID for IID_NULL
-                0,  // LOCALE_SYSTEM_DEFAULT
+                1, // DISPID for OpenConnection2
+                &GUID::zeroed(),
+                0,
                 DISPATCH_METHOD,
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err),
+                &params,
+                None,
+                None,
+                None,
             ).map_err(|e| anyhow!("Failed to open connection: {:?}", e))?;
 
             Ok(())
         }
     }
 
+    #[cfg(windows)]
     pub fn begin_session(&mut self) -> Result<()> {
         unsafe {
             let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
@@ -114,26 +114,24 @@ impl QuickBooksClient {
 
             let mut params = DISPPARAMS::default();
             let mut result = VARIANT::default();
-            let mut exc_info = EXCEPINFO::default();
-            let mut arg_err = 0u32;
-
             session_manager.Invoke(
-                2,  // DISPID for BeginSession
-                &Default::default(),  // GUID for IID_NULL
-                0,  // LOCALE_SYSTEM_DEFAULT
+                2, // DISPID for BeginSession
+                &GUID::zeroed(),
+                0,
                 DISPATCH_METHOD,
-                &mut params,
+                &params,
                 Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err),
+                None,
+                None,
             ).map_err(|e| anyhow!("Failed to begin session: {:?}", e))?;
 
-            let ticket = variant_to_string(&result)?;
+            let ticket = result.to_string();
             self.session_ticket = Some(ticket);
             Ok(())
         }
     }
 
+    #[cfg(windows)]
     pub fn get_company_file_name(&mut self) -> Result<String> {
         unsafe {
             let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.1");
@@ -146,28 +144,43 @@ impl QuickBooksClient {
                 CLSCTX_LOCAL_SERVER
             ).map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
 
+            // Get Company object
             let mut params = DISPPARAMS::default();
             let mut result = VARIANT::default();
-            let mut exc_info = EXCEPINFO::default();
-            let mut arg_err = 0u32;
-
             session_manager.Invoke(
-                3,  // DISPID for GetCurrentCompany
-                &Default::default(),  // GUID for IID_NULL
-                0,  // LOCALE_SYSTEM_DEFAULT
+                3, // DISPID for GetCurrentCompany
+                &GUID::zeroed(),
+                0,
                 DISPATCH_METHOD,
-                &mut params,
+                &params,
                 Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err),
+                None,
+                None,
             ).map_err(|e| anyhow!("Failed to get company: {:?}", e))?;
 
-            let file_name = variant_to_string(&result)?;
+            let company: IDispatch = result.try_into()?;
+            
+            // Get FileName property
+            let mut params = DISPPARAMS::default();
+            let mut result = VARIANT::default();
+            company.Invoke(
+                4, // DISPID for FileName property
+                &GUID::zeroed(),
+                0,
+                DISPATCH_METHOD,
+                &params,
+                Some(&mut result),
+                None,
+                None,
+            ).map_err(|e| anyhow!("Failed to get file name: {:?}", e))?;
+
+            let file_name = result.to_string();
             self.company_file = Some(file_name.clone());
             Ok(file_name)
         }
     }
 
+    #[cfg(windows)]
     pub fn cleanup(&mut self) -> Result<()> {
         if let Some(ticket) = self.session_ticket.take() {
             unsafe {
@@ -180,43 +193,34 @@ impl QuickBooksClient {
                     None,
                     CLSCTX_LOCAL_SERVER
                 ).map_err(|e| anyhow!("Failed to create session manager: {:?}", e))?;
-
+                
+                // End session
                 let mut params = DISPPARAMS::default();
-                let mut args = vec![create_bstr_variant(&ticket)];
-                params.rgvarg = args.as_mut_ptr();
-                params.cArgs = args.len() as u32;
-
-                let mut result = VARIANT::default();
-                let mut exc_info = EXCEPINFO::default();
-                let mut arg_err = 0u32;
-
                 session_manager.Invoke(
-                    5,  // DISPID for EndSession
-                    &Default::default(),  // GUID for IID_NULL
-                    0,  // LOCALE_SYSTEM_DEFAULT
+                    5, // DISPID for EndSession
+                    &GUID::zeroed(),
+                    0,
                     DISPATCH_METHOD,
-                    &mut params,
-                    Some(&mut result),
-                    Some(&mut exc_info),
-                    Some(&mut arg_err),
+                    &params,
+                    None,
+                    None,
+                    None,
                 ).map_err(|e| anyhow!("Failed to end session: {:?}", e))?;
-
-                let mut params = DISPPARAMS::default();
-                let mut result = VARIANT::default();
-                let mut exc_info = EXCEPINFO::default();
-                let mut arg_err = 0u32;
-
+                
+                // Close connection
+                let params = DISPPARAMS::default();
                 session_manager.Invoke(
-                    6,  // DISPID for CloseConnection
-                    &Default::default(),  // GUID for IID_NULL
-                    0,  // LOCALE_SYSTEM_DEFAULT
+                    6, // DISPID for CloseConnection
+                    &GUID::zeroed(),
+                    0,
                     DISPATCH_METHOD,
-                    &mut params,
-                    Some(&mut result),
-                    Some(&mut exc_info),
-                    Some(&mut arg_err),
+                    &params,
+                    None,
+                    None,
+                    None,
                 ).map_err(|e| anyhow!("Failed to close connection: {:?}", e))?;
-
+                
+                // Uninitialize COM
                 CoUninitialize();
             }
         }
@@ -227,39 +231,5 @@ impl QuickBooksClient {
 impl Drop for QuickBooksClient {
     fn drop(&mut self) {
         let _ = self.cleanup();
-    }
-}
-
-fn create_bstr_variant(s: &str) -> VARIANT {
-    unsafe {
-        let mut variant = VARIANT::default();
-        let bstr = ManuallyDrop::new(BSTR::from(s));
-        
-        // Get raw pointers to the union fields and write values
-        let var_union_ptr = ptr::addr_of_mut!(variant.Anonymous);
-        let var_union2_ptr = ptr::addr_of_mut!((*var_union_ptr).Anonymous);
-        let var_union3_ptr = ptr::addr_of_mut!((*var_union2_ptr).Anonymous);
-        
-        // Write the variant type
-        ptr::write(ptr::addr_of_mut!((*var_union2_ptr).vt), VARENUM(VT_BSTR.0));
-        
-        // Write the BSTR value
-        ptr::write(ptr::addr_of_mut!((*var_union3_ptr).bstrVal), bstr);
-        
-        variant
-    }
-}
-
-fn variant_to_string(variant: &VARIANT) -> Result<String> {
-    unsafe {
-        let var_union_ptr = ptr::addr_of!(variant.Anonymous);
-        let var_union2_ptr = ptr::addr_of!((*var_union_ptr).Anonymous);
-        
-        if (*var_union2_ptr).vt == VARENUM(VT_BSTR.0) {
-            let var_union3_ptr = ptr::addr_of!((*var_union2_ptr).Anonymous);
-            let bstr = &(*var_union3_ptr).bstrVal;
-            return Ok(bstr.to_string());
-        }
-        Err(anyhow!("Failed to convert VARIANT to string"))
     }
 }
