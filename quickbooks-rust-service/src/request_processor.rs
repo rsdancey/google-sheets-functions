@@ -1,7 +1,7 @@
-use windows::core::{BSTR, HSTRING, IUnknown};
+use windows::core::{HSTRING, IUnknown, PCWSTR};
 use windows::Win32::System::Com::{
     CLSIDFromProgID, CoCreateInstance, CLSCTX_LOCAL_SERVER,
-    IDispatch, DISPATCH_METHOD,
+    IDispatch, DISPATCH_METHOD, EXCEPINFO,
 };
 use windows::Win32::System::Variant::VARIANT;
 use crate::com_helpers::{create_bstr_variant, create_dispparams, create_empty_dispparams, variant_to_string};
@@ -21,7 +21,7 @@ pub struct RequestProcessor2 {
 impl RequestProcessor2 {
     pub fn new() -> windows::core::Result<Self> {
         let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
-        let clsid = CLSIDFromProgID(&prog_id)?;
+        let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
         let dispatch: IDispatch = unsafe {
             CoCreateInstance::<Option<&IUnknown>, IDispatch>(
                 &clsid,
@@ -49,8 +49,8 @@ impl RequestProcessor2 {
 
     fn get_method_id(dispatch: &IDispatch, name: &str) -> windows::core::Result<i32> {
         let mut dispid = -1i32;
-        let method_name = BSTR::from(name);
-        let names = [method_name.as_pcwstr()];
+        let method_name = HSTRING::from(name);
+        let names = [PCWSTR::from_raw(method_name.as_ptr())];
         
         unsafe {
             dispatch.GetIDsOfNames(
