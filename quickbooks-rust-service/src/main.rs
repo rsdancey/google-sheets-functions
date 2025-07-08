@@ -132,7 +132,7 @@ fn main() -> Result<()> {
     info!("Connected to QuickBooks");
 
     // Start a session
-    qb.begin_session()?;
+    qb.begin_session("")?;  // Empty string means use currently open company file
     info!("Session started");
 
     // Get company file
