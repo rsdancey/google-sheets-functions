@@ -123,6 +123,7 @@ impl QuickBooksClient {
 
             // Open connection
             log::debug!("Opening connection");
+            log::debug!("Calling OpenConnection(appID: BSTR='', appName: BSTR='{}')", self.config.app_name);
             let mut params = DISPPARAMS::default();
             // NOTE: For COM calls using DISPPARAMS, parameters are in reverse order from the C++ sample
             let mut args = vec![
@@ -154,6 +155,7 @@ impl QuickBooksClient {
 
                     // Begin session immediately after successful connection
                     log::debug!("Beginning session with company file: {}", qb_file);
+                    log::debug!("Calling BeginSession(companyFile: BSTR='', mode: BSTR='qbXMLModeEnter')");
                     let mut params = DISPPARAMS::default();
                     // For COM, parameters are passed in reverse order
                     let mut args = vec![
@@ -247,6 +249,7 @@ impl QuickBooksClient {
             let mut arg_err = 0u32;
 
             // GetCurrentCompany takes no parameters, so no need to reverse order
+            log::debug!("Calling GetCurrentCompany()");
             session_manager.Invoke(
                 3,  // DISPID for GetCurrentCompany
                 &Default::default(),  // GUID for IID_NULL
@@ -281,6 +284,7 @@ impl Drop for QuickBooksClient {
                     let mut exc_info = EXCEPINFO::default();
                     let mut arg_err = 0u32;
 
+                    log::debug!("Calling EndSession(ticket: BSTR='{}')", ticket);
                     let _ = request_processor.Invoke(
                         5,  // DISPID for EndSession
                         &Default::default(),
@@ -294,6 +298,7 @@ impl Drop for QuickBooksClient {
 
                     // Try to close connection - takes no parameters
                     let mut params = DISPPARAMS::default();
+                    log::debug!("Calling CloseConnection()");
                     let _ = request_processor.Invoke(
                         6,  // DISPID for CloseConnection
                         &Default::default(),
