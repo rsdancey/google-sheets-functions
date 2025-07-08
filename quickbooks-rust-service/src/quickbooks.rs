@@ -152,8 +152,9 @@ impl QuickBooksClient {
                     log::debug!("Beginning session");
                     let mut params = DISPPARAMS::default();
                     let mut args = vec![
-                        create_bstr_variant(""),  // ticket will be returned
-                        create_bstr_variant(qb_file),
+                        create_bstr_variant(qb_file),     // First arg: filename
+                        create_bstr_variant("DoNotCare"), // Second arg: mode
+                        // Third arg: ticket (output parameter)
                     ];
                     params.rgvarg = args.as_mut_ptr();
                     params.cArgs = args.len() as u32;
