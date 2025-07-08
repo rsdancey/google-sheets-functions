@@ -300,7 +300,7 @@ impl RequestProcessor2 {
         Self::check_sdk_installation()?;
         Self::check_registry_paths()?;
 
-        let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
+let prog_id = HSTRING::from("QBXMLRP.RequestProcessor");
         let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
 
         // Create the COM object
