@@ -143,6 +143,7 @@ impl QuickBooksClient {
                 create_bstr_variant(""),             // appID (first parameter)
                 create_bstr_variant(&self.config.app_name),  // appName (second parameter)
             ];
+            log::debug!("Calling Request Processor with args: appID (BSTR): {:?}, appName (BSTR): {:?}", "", &self.config.app_name);
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
 
