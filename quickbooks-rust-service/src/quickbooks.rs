@@ -85,104 +85,130 @@ impl QuickBooksClient {
                 }
             };
 
-            // Try different ProgIDs
-            let prog_ids = [
-                "QBXMLRP2.RequestProcessor",
-                "QBXMLRP2.RequestProcessor.1",
-                "QBXMLRPLib.RequestProcessor",
-                "QBXMLRPLib.RequestProcessor.1"
-            ];
+            // Try to create Session Manager
+            let session_manager_id = "QBXMLRP2.SessionManager";
+            log::debug!("Attempting to create Session Manager");
 
-            // Try each ProgID until one works
-            let mut last_error = None;
-            for prog_id_str in prog_ids {
-                log::debug!("Checking registry for ProgID: {}", prog_id_str);
-                
-                let mut hkey = HKEY::default();
-                let key_path = format!("SOFTWARE\\Classes\\{}\\CLSID", prog_id_str) + "\0";
-                let result = RegOpenKeyExA(
-                    HKEY_LOCAL_MACHINE,
-                    PCSTR(key_path.as_ptr()),
-                    0,
-                    KEY_READ,
-                    &mut hkey
-                );
+            // Check registry for Session Manager
+            let mut hkey = HKEY::default();
+            let key_path = format!("SOFTWARE\\Classes\\{}\\CLSID", session_manager_id) + "\0";
+            let result = RegOpenKeyExA(
+                HKEY_LOCAL_MACHINE,
+                PCSTR(key_path.as_ptr()),
+                0,
+                KEY_READ,
+                &mut hkey
+            );
 
-                if result.is_ok() {
-                    log::debug!("Found registry entry for {}", prog_id_str);
-                    RegCloseKey(hkey);
+            if result.is_err() {
+                let msg = format!("QuickBooks Session Manager not found in registry. Please ensure QuickBooks and the SDK v16 are properly installed.");
+                log::error!("{}", msg);
+                CoUninitialize();
+                return Err(anyhow!(msg));
+            }
+            RegCloseKey(hkey);
 
-                    // Try to create COM object with this ProgID
-                    let prog_id = HSTRING::from(prog_id_str);
-                    match CLSIDFromProgID(&prog_id) {
-                        Ok(clsid) => {
-                            log::debug!("Got CLSID for {}", prog_id_str);
-                            match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
-                                Ok(session_manager) => {
-                                    log::debug!("Created session manager with {}", prog_id_str);
-                                    
-                                    // Set up connection parameters
-                                    let mut params = DISPPARAMS::default();
-                                    let mut args = vec![
-                                        create_bstr_variant(&self.config.app_id),
-                                        create_bstr_variant(&self.config.app_name),
-                                    ];
-                                    params.rgvarg = args.as_mut_ptr();
-                                    params.cArgs = args.len() as u32;
+            // Create Session Manager
+            let prog_id = HSTRING::from(session_manager_id);
+            let clsid = match CLSIDFromProgID(&prog_id) {
+                Ok(clsid) => clsid,
+                Err(e) => {
+                    let msg = format!("Failed to get CLSID for Session Manager: 0x{:08X}", e.code().0);
+                    log::error!("{}", msg);
+                    CoUninitialize();
+                    return Err(anyhow!(msg));
+                }
+            };
 
-                                    let mut result = VARIANT::default();
-                                    let mut exc_info = EXCEPINFO::default();
-                                    let mut arg_err = 0u32;
+            let session_manager = match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
+                Ok(sm) => sm,
+                Err(e) => {
+                    let code = e.code().0;
+                    let msg = if code == -2147221164i32 {
+                        format!(
+                            "Failed to create Session Manager - COM class not registered (0x80040154). \
+                            This usually means either:\n\
+                            1. QuickBooks is not installed\n\
+                            2. QuickBooks SDK is not installed\n\
+                            3. The SDK components are not properly registered"
+                        )
+                    } else {
+                        format!("Failed to create Session Manager: 0x{:08X}", code)
+                    };
+                    log::error!("{}", msg);
+                    CoUninitialize();
+                    return Err(anyhow!(msg));
+                }
+            };
 
-                                    // Try to open connection
-                                    match session_manager.Invoke(
-                                        1,  // DISPID for OpenConnection2
-                                        &Default::default(),
-                                        0,
-                                        DISPATCH_METHOD,
-                                        &mut params,
-                                        Some(&mut result),
-                                        Some(&mut exc_info),
-                                        Some(&mut arg_err),
-                                    ) {
-                                        Ok(_) => {
-                                            log::debug!("Successfully connected using {}", prog_id_str);
-                                            return Ok(());
-                                        }
-                                        Err(e) => {
-                                            let msg = format!("Failed to open connection with {}: {:?}", prog_id_str, e);
-                                            log::warn!("{}", msg);
-                                            last_error = Some(msg);
-                                        }
-                                    }
+            // Now get the Request Processor from the Session Manager
+            let mut params = DISPPARAMS::default();
+            let mut result = VARIANT::default();
+            let mut exc_info = EXCEPINFO::default();
+            let mut arg_err = 0u32;
+
+            match session_manager.Invoke(
+                1,  // DISPID for GetRequestProcessor
+                &Default::default(),
+                0,
+                DISPATCH_METHOD,
+                &mut params,
+                Some(&mut result),
+                Some(&mut exc_info),
+                Some(&mut arg_err),
+            ) {
+                Ok(_) => {
+                    match result.try_into() {
+                        Ok(request_processor) => {
+                            // Set up connection parameters for the Request Processor
+                            let mut params = DISPPARAMS::default();
+                            let mut args = vec![
+                                create_bstr_variant(&self.config.app_id),
+                                create_bstr_variant(&self.config.app_name),
+                            ];
+                            params.rgvarg = args.as_mut_ptr();
+                            params.cArgs = args.len() as u32;
+
+                            let mut result = VARIANT::default();
+                            let mut exc_info = EXCEPINFO::default();
+                            let mut arg_err = 0u32;
+
+                            // Open connection using the Request Processor
+                            match request_processor.Invoke(
+                                1,  // DISPID for OpenConnection2
+                                &Default::default(),
+                                0,
+                                DISPATCH_METHOD,
+                                &mut params,
+                                Some(&mut result),
+                                Some(&mut exc_info),
+                                Some(&mut arg_err),
+                            ) {
+                                Ok(_) => {
+                                    log::debug!("Successfully connected to QuickBooks");
+                                    Ok(())
                                 }
                                 Err(e) => {
-                                    let code = e.code().0;
-                                    let msg = if code == -2147221164i32 {
-                                        format!(
-                                            "Failed to create session manager with {} - COM class not registered (0x80040154). \
-                                            This usually means either:\n\
-                                            1. QuickBooks is not installed\n\
-                                            2. QuickBooks SDK is not installed\n\
-                                            3. The SDK components are not properly registered",
-                                            prog_id_str
-                                        )
-                                    } else {
-                                        format!("Failed to create session manager with {}: 0x{:08X}", prog_id_str, code)
-                                    };
-                                    log::warn!("{}", msg);
-                                    last_error = Some(msg);
+                                    let msg = format!("Failed to open connection: {:?}", e);
+                                    log::error!("{}", msg);
+                                    CoUninitialize();
+                                    Err(anyhow!(msg))
                                 }
                             }
                         }
                         Err(e) => {
-                            let msg = format!("Failed to get CLSID for {}: 0x{:08X}", prog_id_str, e.code().0);
-                            log::warn!("{}", msg);
-                            last_error = Some(msg);
+                            let msg = format!("Failed to get Request Processor from Session Manager: {:?}", e);
+                            log::error!("{}", msg);
+                            CoUninitialize();
+                            Err(anyhow!(msg))
                         }
                     }
-                } else {
-                    log::debug!("No registry entry found for {}", prog_id_str);
+                }
+                Err(e) => {
+                    let msg = format!("Failed to get Request Processor: {:?}", e);
+                    log::error!("{}", msg);
+                    CoUninitialize();
+                    Err(anyhow!(msg))
                 }
             }
 
