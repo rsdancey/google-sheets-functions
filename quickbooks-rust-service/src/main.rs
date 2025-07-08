@@ -1,5 +1,5 @@
 use anyhow::{Result, Context};
-use log::{error, info};
+use log::info;
 use serde::Deserialize;
 use std::env;
 
