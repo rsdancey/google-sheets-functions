@@ -1,6 +1,5 @@
 use anyhow::{Result, anyhow};
 use std::mem::ManuallyDrop;
-use std::ptr;
 use windows_core::{BSTR, HSTRING, IUnknown};
 use windows::core::PCWSTR;
 use windows::Win32::System::Com::{
