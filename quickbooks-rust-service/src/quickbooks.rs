@@ -94,15 +94,9 @@ impl QuickBooksClient {
                 }
             };
 
-            // Try to create Request Processor
-            let request_processor_id = "QBXMLRP2.RequestProcessor";
-            log::debug!("Attempting to create Session Manager");
-
-            // Create Request Processor
+            // Create Request Processor exactly as in the sample
             log::debug!("Creating Request Processor");
-
-            // Create Request Processor
-            let prog_id = HSTRING::from(request_processor_id);
+            let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor");
             let clsid = match CLSIDFromProgID(&prog_id) {
                 Ok(clsid) => clsid,
                 Err(e) => {
@@ -113,42 +107,29 @@ impl QuickBooksClient {
                 }
             };
 
+            // Create instance of Request Processor
             let request_processor = match CoCreateInstance::<Option<&IUnknown>, IDispatch>(&clsid, None, CLSCTX_ALL) {
                 Ok(rp) => {
                     self.request_processor = Some(rp.clone());
                     rp
                 },
                 Err(e) => {
-                    let code = e.code().0;
-                    let msg = if code == -2147221164i32 {
-                        format!(
-                            "Failed to create Session Manager - COM class not registered (0x80040154). \
-                            This usually means either:\n\
-                            1. QuickBooks is not installed\n\
-                            2. QuickBooks SDK is not installed\n\
-                            3. The SDK components are not properly registered"
-                        )
-                    } else {
-                        format!("Failed to create Session Manager: 0x{:08X}", code)
-                    };
+                    let msg = format!("Failed to create Request Processor: 0x{:08X}", e.code().0);
                     log::error!("{}", msg);
                     CoUninitialize();
                     return Err(anyhow!(msg));
                 }
             };
 
-            // Open connection using the Request Processor
+            // Open connection
+            log::debug!("Opening connection");
             let mut params = DISPPARAMS::default();
             let mut args = vec![
-                create_bstr_variant(&self.config.app_name),  // Args are in reverse order for COM
-                create_bstr_variant(&self.config.app_id),
+                create_bstr_variant(&self.config.app_id),       // First argument
+                create_bstr_variant(&self.config.app_name),     // Second argument
             ];
             params.rgvarg = args.as_mut_ptr();
             params.cArgs = args.len() as u32;
-
-            let mut result = VARIANT::default();
-            let mut exc_info = EXCEPINFO::default();
-            let mut arg_err = 0;
 
             match request_processor.Invoke(
                 1,  // DISPID for OpenConnection2
@@ -156,32 +137,16 @@ impl QuickBooksClient {
                 0,
                 DISPATCH_METHOD,
                 &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err),
+                None,  // No result needed for OpenConnection
+                None,  // No exception info needed
+                None,  // No arg error needed
             ) {
                 Ok(_) => {
                     log::debug!("Successfully connected to QuickBooks");
                     Ok(())
                 }
                 Err(e) => {
-                    let code = e.code().0;
-                    // Log the exception info
-                    if !exc_info.bstrDescription.is_empty() {
-                        log::error!("Exception description: {:?}", exc_info.bstrDescription);
-                    }
-                    if !exc_info.bstrSource.is_empty() {
-                        log::error!("Exception source: {:?}", exc_info.bstrSource);
-                    }
-                    if exc_info.scode != 0 {
-                        log::error!("Exception scode: 0x{:08X}", exc_info.scode);
-                    }
-                    
-                    let msg = if let Some(info) = e.info() {
-                        format!("Failed to open connection: 0x{:08X} - {:?}", code, info)
-                    } else {
-                        format!("Failed to open connection: 0x{:08X}", code)
-                    };
+                    let msg = format!("Failed to open connection: 0x{:08X}", e.code().0);
                     log::error!("{}", msg);
                     CoUninitialize();
                     Err(anyhow!(msg))
