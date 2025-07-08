@@ -22,6 +22,42 @@ pub struct RequestProcessor2 {
 }
 
 impl RequestProcessor2 {
+    fn check_sdk_installation() -> windows::core::Result<()> {
+        log::info!("Checking QuickBooks SDK installation status");
+        unsafe {
+            // Check Program Files paths
+            let program_files_paths = [
+                r"C:\Program Files\Common Files\Intuit\QuickBooks\QBXMLRPSync.dll",
+                r"C:\Program Files\Common Files\Intuit\QuickBooks\QBXMLRP2.dll",
+                r"C:\Program Files (x86)\Common Files\Intuit\QuickBooks\QBXMLRPSync.dll",
+                r"C:\Program Files (x86)\Common Files\Intuit\QuickBooks\QBXMLRP2.dll",
+            ];
+
+            for path in program_files_paths.iter() {
+                if Path::new(path).exists() {
+                    log::debug!("Found SDK component: {}", path);
+                } else {
+                    log::warn!("Missing SDK component: {}", path);
+                }
+            }
+
+            // Check if SDK is registered in Add/Remove Programs
+            let mut hklm = HKEY::default();
+            let _ = RegOpenKeyExA(
+                HKEY_LOCAL_MACHINE,
+                PCSTR::from_raw(b"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\QuickBooks SDK v15.0\0".as_ptr()),
+                0,
+                KEY_READ,
+                &mut hklm
+            ).map(|_| {
+                log::debug!("Found QuickBooks SDK in Add/Remove Programs");
+            }).map_err(|e| {
+                log::warn!("QuickBooks SDK not found in Add/Remove Programs: 0x{:08X}", e.code().0);
+            });
+        }
+        Ok(())
+    }
+
     fn check_registry_paths() -> windows::core::Result<()> {
         log::info!("Starting detailed COM registration check");
         unsafe {
@@ -117,6 +153,7 @@ impl RequestProcessor2 {
     }
 
     pub fn new() -> windows::core::Result<Self> {
+        Self::check_sdk_installation()?;
         Self::check_registry_paths()?;
 
         let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
