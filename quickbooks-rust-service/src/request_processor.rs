@@ -1,572 +1,396 @@
-use std::path::Path;
-use std::ffi::CString;
-use std::ptr;
-use windows::core::{GUID, HSTRING, PCWSTR, PCSTR, PSTR};
-use windows::Win32::System::Registry::{HKEY, HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER};
-use windows::Win32::System::Com::{CLSIDFromProgID, CoCreateInstance, CLSCTX_LOCAL_SERVER, IDispatch, EXCEPINFO, DISPATCH_METHOD, DISPATCH_FLAGS};
-
-#[derive(Debug)]
-enum QBXMLRPConnectionType {
-    Unknown = 0,
-    LocalQBD = 1,
-    LocalQBDLaunchUI = 2,
-    RemoteQBD = 3,
-    RemoteQBOE = 4,
-}
-use windows::Win32::System::Registry::{RegOpenKeyExA, RegQueryValueExA, RegEnumKeyExA, RegCloseKey, KEY_READ};
-use windows::Win32::System::Variant::VARIANT;
-use crate::com_helpers::{create_bstr_variant, create_dispparams, create_empty_dispparams, variant_to_string};
+use winapi::shared::guiddef::{CLSID, IID_NULL};
+use winapi::um::oaidl::{IDispatch, VARIANT, EXCEPINFO};
+use crate::safe_variant::SafeVariant;
 use crate::FileMode;
 
-/// Type-safe wrapper for QBXMLRP2 RequestProcessor2
+const DISPATCH_METHOD: u16 = 1;
+
+#[allow(non_upper_case_globals)]
+pub const IID_IDispatch: winapi::shared::guiddef::GUID = winapi::shared::guiddef::GUID {
+    Data1: 0x00020400,
+    Data2: 0x0000,
+    Data3: 0x0000,
+    Data4: [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
+};
+
+#[derive(Debug, Clone)]
+pub struct AccountInfo {
+    pub name: String,
+    pub number: String,
+    pub account_type: String,
+    pub balance: f64,
+}
+
+/// Type-safe wrapper for QBFC SessionManager 
+/// This uses the QBFC API (QBFC16.QBSessionManager) instead of QBXML API (QBXMLRP2.RequestProcessor)
+/// The QBFC API is more reliable for COM interop and uses different parameter types
 pub struct RequestProcessor2 {
-    inner: IDispatch,
-    // Cache method IDs after first lookup
-    open_connection_id: i32,
-    open_connection2_id: i32,
-    begin_session_id: i32,
-    end_session_id: i32,
-    close_connection_id: i32,
-    process_request_id: i32,
+    inner: *mut IDispatch,
 }
 
 impl RequestProcessor2 {
-    fn check_sdk_installation() -> windows::core::Result<()> {
-        log::info!("Checking QuickBooks SDK installation status");
-        unsafe {
-            // Check Program Files paths
-            let program_files_paths = [
-                r"C:\Program Files\Common Files\Intuit\QuickBooks\QBXMLRPSync.dll",
-                r"C:\Program Files\Common Files\Intuit\QuickBooks\QBXMLRP2.dll",
-                r"C:\Program Files (x86)\Common Files\Intuit\QuickBooks\QBXMLRPSync.dll",
-                r"C:\Program Files (x86)\Common Files\Intuit\QuickBooks\QBXMLRP2.dll",
-            ];
+    pub fn new() -> Result<Self, anyhow::Error> {
+        // Try QBFC ProgIDs - use the working QBFC API instead of QBXML
+        let prog_ids_to_try = [
+            "QBFC16.QBSessionManager",         // QB 2024/2023 - most likely
+            "QBFC15.QBSessionManager",         // QB 2022
+            "QBFC14.QBSessionManager",         // QB 2021
+            "QBFC13.QBSessionManager",         // QB 2020 - fallback
+        ];
 
-            for path in program_files_paths.iter() {
-                if Path::new(path).exists() {
-                    log::debug!("Found SDK component: {}", path);
+        for prog_id_str in prog_ids_to_try.iter() {
+            log::info!("Trying QBFC ProgID: {}", prog_id_str);
+            let prog_id_wide = widestring::U16CString::from_str(*prog_id_str).unwrap();
+            let mut clsid: CLSID = unsafe { std::mem::zeroed() };
+            let hr = unsafe {
+                winapi::um::combaseapi::CLSIDFromProgID(
+                    prog_id_wide.as_ptr(),
+                    &mut clsid as *mut CLSID
+                )
+            };
+            if hr < 0 {
+                log::warn!("ProgID {} not found or CLSIDFromProgID failed: HRESULT=0x{:08X}", prog_id_str, hr as u32);
+                continue;
+            }
+            let mut dispatch_ptr: *mut IDispatch = std::ptr::null_mut();
+            let hr = unsafe {
+                winapi::um::combaseapi::CoCreateInstance(
+                    &clsid,
+                    std::ptr::null_mut(),
+                    winapi::shared::wtypesbase::CLSCTX_INPROC_SERVER,
+                    &IID_IDispatch,
+                    &mut dispatch_ptr as *mut _ as *mut _
+                )
+            };
+            if hr >= 0 && !dispatch_ptr.is_null() {
+                log::info!("✅ Successfully created QBFC COM instance with ProgID: {}", prog_id_str);
+                let instance = Self {
+                    inner: dispatch_ptr,
+                };
+                log::info!("RequestProcessor2::new: instance address = {:p}, COM inner = {:p}", &instance, instance.inner);
+                return Ok(instance);
+            } else {
+                log::warn!("Failed to create COM instance for {}: HRESULT=0x{:08X}", prog_id_str, hr as u32);
+            }
+        }
+        Err(anyhow::anyhow!("Failed to create QBFC COM instance for all ProgIDs"))
+    }
+
+    fn invoke_method(&self, method_name: &str, params: &[SafeVariant]) -> Result<SafeVariant, anyhow::Error> {
+        // Log parameter types and values for debugging
+        // Log BSTR details for each parameter before COM call
+        for (i, param) in params.iter().enumerate() {
+            let vt = unsafe { param.as_variant().n1.n2().vt };
+            if vt == winapi::shared::wtypes::VT_BSTR as u16 {
+                let bstr = unsafe { *param.as_variant().n1.n2().n3.bstrVal() };
+                if !bstr.is_null() {
+                    let len = unsafe { winapi::um::oleauto::SysStringLen(bstr) } as usize;
+                    let slice = unsafe { std::slice::from_raw_parts(bstr, len) };
+                    println!("[invoke_method] param[{}] BSTR ptr={:p} len={} utf16={:?}", i, bstr, len, &slice[..std::cmp::min(len, 8)]);
                 } else {
-                    log::warn!("Missing SDK component: {}", path);
+                    println!("[invoke_method] param[{}] BSTR ptr=NULL", i);
                 }
             }
-
-            // Check SDK 16.0 installation paths
-            // Try to find actual SDK registration
-            let base_paths = [
-                r"SOFTWARE\Intuit",
-                r"SOFTWARE\WOW6432Node\Intuit",
-            ];
-
-            for base_path in base_paths.iter() {
-                let mut key = HKEY::default();
-                if RegOpenKeyExA(
-                    HKEY_LOCAL_MACHINE,
-                    PCSTR::from_raw(base_path.as_bytes().as_ptr()),
-                    0,
-                    KEY_READ,
-                    &mut key
-                ).is_ok() {
-                    log::info!("Scanning for SDK keys in: {}", base_path);
-                    let mut index = 0u32;
-                    let mut name_buf = [0u8; 260];
-                    let mut name_size = name_buf.len() as u32;
-
-                    while RegEnumKeyExA(
-                        key,
-                        index,
-                        PSTR(name_buf.as_mut_ptr() as *mut u8),
-                        &mut name_size,
-                        None,
-                        PSTR(ptr::null_mut()),
-                        None,
-                        None,
-                    ).is_ok() {
-                        if let Ok(subkey_name) = String::from_utf8(name_buf[..name_size as usize].to_vec()) {
-                            if subkey_name.contains("QBSDK") || subkey_name.contains("QuickBooks") {
-                                log::info!("Found SDK-related key: {}", subkey_name);
-                            }
-                        }
-                        index += 1;
-                        name_size = name_buf.len() as u32;
-                    }
-                    let _ = RegCloseKey(key);
-                }
-            }
-
-            let sdk_paths = [
-                r"SOFTWARE\Intuit\QBSDK16.0",
-                r"SOFTWARE\WOW6432Node\Intuit\QBSDK16.0",
-                r"SOFTWARE\Intuit\QuickBooks\QBSDKComponentRegister",
-                r"SOFTWARE\WOW6432Node\Intuit\QuickBooks\QBSDKComponentRegister",
-            ];
-
-            for path in sdk_paths.iter() {
-                let mut key = HKEY::default();
-                match RegOpenKeyExA(
-                    HKEY_LOCAL_MACHINE,
-                    PCSTR::from_raw(path.as_bytes().as_ptr()),
-                    0,
-                    KEY_READ,
-                    &mut key
-                ) {
-                    Ok(_) => {
-                        log::info!("Found SDK path: {}", path);
-                        let mut buf = [0u8; 260];
-                        let mut size = buf.len() as u32;
-                        
-                        // Check for installation path
-                        if RegQueryValueExA(
-                            key,
-                            PCSTR::from_raw(b"InstallPath\0".as_ptr()),
-                            None,
-                            None,
-                            Some(buf.as_mut_ptr() as *mut u8),
-                            Some(&mut size),
-                        ).is_ok() {
-                            if let Ok(install_path) = String::from_utf8(buf[..size as usize].to_vec()) {
-                                log::info!("SDK Install Path: {}", install_path.trim_end_matches('\0'));
-                            }
-                        }
-                        
-                        // Check for version info
-                        if RegQueryValueExA(
-                            key,
-                            PCSTR::from_raw(b"Version\0".as_ptr()),
-                            None,
-                            None,
-                            Some(buf.as_mut_ptr() as *mut u8),
-                            Some(&mut size),
-                        ).is_ok() {
-                            if let Ok(version) = String::from_utf8(buf[..size as usize].to_vec()) {
-                                log::info!("SDK Version: {}", version.trim_end_matches('\0'));
-                            }
-                        }
-                        
-                        let _ = RegCloseKey(key);
-                    },
-                    Err(e) => {
-                        log::warn!("SDK path not found: {} (error: 0x{:08X})", path, e.code().0);
-                    }
-                }
-            }
-
-            // Check if SDK is registered in Add/Remove Programs
-            let mut hklm = HKEY::default();
-            let _ = RegOpenKeyExA(
-                HKEY_LOCAL_MACHINE,
-                PCSTR::from_raw(b"SOFTWARE/Microsoft/Windows/CurrentVersion/Uninstall/qbsdk16.0(x64)\0".as_ptr()),
-                0,
-                KEY_READ,
-                &mut hklm
-            ).map(|_| {
-                log::debug!("Found QuickBooks SDK in Add/Remove Programs");
-            }).map_err(|e| {
-                log::warn!("QuickBooks SDK not found in Add/Remove Programs: 0x{:08X}", e.code().0);
-            });
+            println!("[invoke_method] param[{}] vt={}", i, vt);
         }
-        Ok(())
-    }
-
-    fn check_registry_paths() -> windows::core::Result<()> {
-        log::info!("Starting detailed COM registration check");
-        unsafe {
-            log::info!("Checking HKEY_CURRENT_USER registry paths");
-            let hkcu_paths = [
-                r"SOFTWARE\Classes\QBXMLRP2.RequestProcessor.2",
-                r"SOFTWARE\Classes\QBXMLRP2.RequestProcessor2",
-                r"SOFTWARE\Classes\CLSID\{62989BF0-0AA7-11D4-8754-00A0C9AC7AC3}",
-                r"SOFTWARE\Classes\CLSID\{71F531F5-8E67-4A7A-9161-15733FFC3206}",
-            ];
-
-            let mut hkcu = HKEY::default();
-            RegOpenKeyExA(
-                HKEY_CURRENT_USER,
-                PCSTR::null(),
-                0,
-                KEY_READ,
-                &mut hkcu
-            )?;
-
-            for path in hkcu_paths.iter() {
-                let mut key = HKEY::default();
-                match RegOpenKeyExA(
-                    hkcu,
-                    PCSTR::from_raw(path.as_bytes().as_ptr()),
-                    0,
-                    KEY_READ,
-                    &mut key
-                ) {
-                    Ok(_) => {
-                        log::debug!("Found registry key (HKCU): {}", path);
-                        let _ = RegCloseKey(key);
-                    },
-                    Err(e) => {
-                        log::warn!("Registry key not found (HKCU): {} (error: 0x{:08X})", path, e.code().0);
-                    }
-                }
-            }
-            let _ = RegCloseKey(hkcu);
-
-            log::info!("Checking HKEY_LOCAL_MACHINE registry paths");
-            let paths = [
-                // Check both naming variations
-                r"SOFTWARE\Classes\QBXMLRP2.RequestProcessor.2",
-                r"SOFTWARE\Classes\QBXMLRP2.RequestProcessor2",
-                r"SOFTWARE\Classes\WOW6432Node\QBXMLRP2.RequestProcessor.2",
-                r"SOFTWARE\Classes\WOW6432Node\QBXMLRP2.RequestProcessor2",
-                // Check both CLSIDs we've seen
-                r"SOFTWARE\Classes\CLSID\{62989BF0-0AA7-11D4-8754-00A0C9AC7AC3}",
-                r"SOFTWARE\Classes\CLSID\{71F531F5-8E67-4A7A-9161-15733FFC3206}",
-                r"SOFTWARE\Classes\WOW6432Node\CLSID\{62989BF0-0AA7-11D4-8754-00A0C9AC7AC3}",
-                r"SOFTWARE\Classes\WOW6432Node\CLSID\{71F531F5-8E67-4A7A-9161-15733FFC3206}",
-            ];
-
-            let mut hklm = HKEY::default();
-            RegOpenKeyExA(
-                HKEY_LOCAL_MACHINE,
-                PCSTR::null(),
-                0,
-                KEY_READ,
-                &mut hklm
-            )?;
-
-            for path in paths.iter() {
-                log::debug!("Checking registry path: {}", path);
-                let mut key = HKEY::default();
-                match RegOpenKeyExA(
-                    hklm,
-                    PCSTR::from_raw(path.as_bytes().as_ptr()),
-                    0,
-                    KEY_READ,
-                    &mut key
-                ) {
-                    Ok(_) => {
-                        log::debug!("Found registry key (HKLM): {}", path);
-                        let mut found_any_values = false;
-                        log::debug!("Found registry key: {}", path);
-                        let mut buf = [0u8; 260];
-                        let mut size = buf.len() as u32;
-                        // Check InprocServer32 key
-                        if RegQueryValueExA(
-                            key,
-                            PCSTR::from_raw(b"InprocServer32\0".as_ptr()),
-                            None,
-                            None,
-                            Some(buf.as_mut_ptr() as *mut u8),
-                            Some(&mut size),
-                        ).is_ok() {
-                            if let Ok(path) = String::from_utf8(buf[..size as usize].to_vec()) {
-                                log::debug!("DLL path: {}", path);
-                                if let Some(path) = Path::new(&path).parent() {
-                                    log::debug!("DLL directory exists: {}", path.exists());
-                                }
-                                found_any_values = true;
-                            }
-                        }
-
-                        // Check additional values
-                        let values_to_check = [
-                            "LocalServer32",
-                            "ProgID",
-                            "VersionIndependentProgID",
-                            "Implemented Categories",
-                        ];
-
-                        for value_name in values_to_check.iter() {
-                            let mut buf = [0u8; 260];
-                            let mut size = buf.len() as u32;
-                            if RegQueryValueExA(
-                                key,
-                            PCSTR::from_raw(CString::new(format!("{value_name}")).unwrap().as_bytes_with_nul().as_ptr()),
-                                None,
-                                None,
-                                Some(buf.as_mut_ptr() as *mut u8),
-                                Some(&mut size),
-                            ).is_ok() {
-                                if let Ok(value) = String::from_utf8(buf[..size as usize].to_vec()) {
-                                    log::debug!("Found {} = {}", value_name, value.trim_end_matches('\0'));
-                                    found_any_values = true;
-                                }
-                            }
-                        }
-
-                        if !found_any_values {
-                            log::warn!("Registry key exists but has no relevant values: {}", path);
-                        }
-
-                        let _ = RegCloseKey(key);
-                    },
-                    Err(e) => {
-                        log::warn!("Registry key not found: {} (error: 0x{:08X})", path, e.code().0);
-                    }
-                }
-            }
-            let _ = RegCloseKey(hklm);
-        }
-        Ok(())
-    }
-
-    pub fn new() -> windows::core::Result<Self> {
-        Self::check_sdk_installation()?;
-        Self::check_registry_paths()?;
-
-// Try known CLSIDs
-// Create RequestProcessor2 COM object directly from ProgID
-let prog_id = HSTRING::from("QBXMLRP2.RequestProcessor.2");
-let clsid = unsafe { CLSIDFromProgID(&prog_id)? };
-
-// Create the COM object with specific server type
-let dispatch: IDispatch = unsafe {
-    CoCreateInstance(
-        &clsid,
-        None,
-        CLSCTX_LOCAL_SERVER  // Use local server like SDKTestPlus3
-    )?
-};
-        log::debug!("Successfully created COM instance");
-
-        // Get all method IDs upfront
-        let open_connection_id = Self::get_method_id(&dispatch, "OpenConnection")?;
-        let open_connection2_id = Self::get_method_id(&dispatch, "OpenConnection2")?;
-        let begin_session_id = Self::get_method_id(&dispatch, "BeginSession")?;
-        let end_session_id = Self::get_method_id(&dispatch, "EndSession")?;
-        let close_connection_id = Self::get_method_id(&dispatch, "CloseConnection")?;
-        let process_request_id = Self::get_method_id(&dispatch, "ProcessRequest")?;
-
-        Ok(Self {
-            inner: dispatch,
-            open_connection_id,
-            open_connection2_id,
-            begin_session_id,
-            end_session_id,
-            close_connection_id,
-            process_request_id,
-        })
-    }
-
-    fn get_method_id(dispatch: &IDispatch, name: &str) -> windows::core::Result<i32> {
-        let mut dispid = -1i32;
-        let method_name = HSTRING::from(name);
-        let names = [PCWSTR::from_raw(method_name.as_ptr())];
-        
-        unsafe {
-            dispatch.GetIDsOfNames(
-                &windows::core::GUID::zeroed(),
-                names.as_ptr(),
+        let mut dispid = 0i32;
+        let method_name_wide = widestring::U16CString::from_str(method_name).unwrap();
+        let names = [method_name_wide.as_ptr()];
+        let hr = unsafe {
+            ((*(*self.inner).lpVtbl).GetIDsOfNames)(
+                self.inner,
+                &IID_NULL,
+                names.as_ptr() as *mut _,
                 1,
-                0x0409, // LCID_ENGLISH_US
-                &mut dispid,
-            )?
-        }
-        Ok(dispid)
-    }
-
-pub fn open_connection2(&self, app_id: &str, app_name: &str, conn_type: QBXMLRPConnectionType) -> windows::core::Result<()> {
-        let app_id_var = create_bstr_variant(app_id);
-        let app_name_var = create_bstr_variant(app_name);
-        let conn_type_var = VARIANT::default(); // TODO: Create integer variant
-        let args = [app_id_var, app_name_var, conn_type_var];
-
-        let mut params = create_dispparams(&args);
-        let mut result = VARIANT::default();
-        let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
-        
-        unsafe {
-            self.inner.Invoke(
-                self.open_connection2_id,
-                &GUID::zeroed(),
-                0x0409,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err)
+                0x0409,
+                &mut dispid
             )
+        };
+        if hr < 0 {
+            return Err(anyhow::anyhow!("GetIDsOfNames failed: HRESULT=0x{:08X}", hr));
         }
+        // --- FIX: Ensure VARIANTs outlive the COM call ---
+        let mut variants: Vec<winapi::um::oaidl::VARIANT> = params.iter().map(|v| v.to_winvariant()).collect();
+        let mut dispparams = winapi::um::oaidl::DISPPARAMS {
+            rgvarg: if variants.is_empty() { std::ptr::null_mut() } else { variants.as_mut_ptr() },
+            rgdispidNamedArgs: std::ptr::null_mut(),
+            cArgs: variants.len() as u32,
+            cNamedArgs: 0,
+        };
+        let mut result: VARIANT = unsafe { std::mem::zeroed() };
+        let mut excepinfo: EXCEPINFO = unsafe { std::mem::zeroed() };
+        let mut arg_err = 0u32;
+        let hr = unsafe {
+            ((*(*self.inner).lpVtbl).Invoke)(
+                self.inner,
+                dispid,
+                &IID_NULL,
+                0x0409,
+                DISPATCH_METHOD,
+                &mut dispparams,
+                &mut result,
+                &mut excepinfo,
+                &mut arg_err
+            )
+        };
+        if hr < 0 {
+            // Extract EXCEPINFO details for diagnostics
+            let bstr_to_string = |bstr: *mut u16| {
+                if bstr.is_null() { return String::new(); }
+                unsafe {
+                    let len = (0..).take_while(|&i| *bstr.offset(i) != 0).count();
+                    let slice = std::slice::from_raw_parts(bstr, len);
+                    String::from_utf16_lossy(slice)
+                }
+            };
+            let description = bstr_to_string(excepinfo.bstrDescription);
+            let source = bstr_to_string(excepinfo.bstrSource);
+            let helpfile = bstr_to_string(excepinfo.bstrHelpFile);
+            log::error!(
+                "COM Invoke failed: method={method_name}, HRESULT=0x{hr:08X}, arg_err={},\n  EXCEPINFO: code={}, wCode={}, source='{}', description='{}', helpfile='{}', helpctx={}, scode=0x{:08X}",
+                arg_err,
+                excepinfo.wCode,
+                excepinfo.wCode,
+                source,
+                description,
+                helpfile,
+                excepinfo.dwHelpContext,
+                excepinfo.scode as u32
+            );
+            return Err(anyhow::anyhow!(
+                "Invoke failed: method={method}, HRESULT=0x{hr:08X}, description='{description}', source='{source}', helpfile='{helpfile}', scode=0x{scode:08X}",
+                method=method_name,
+                hr=hr,
+                description=description,
+                source=source,
+                helpfile=helpfile,
+                scode=excepinfo.scode as u32
+            ));
+        }
+        Ok(SafeVariant::from_winvariant(&result))
     }
 
-pub fn open_connection(&self, app_id: &str, app_name: &str) -> windows::core::Result<()> {
-        // Set auth preferences first
-        unsafe {
-            let mut auth_prefs_result = VARIANT::default();
-            let _ = self.inner.Invoke(
-                Self::get_method_id(&self.inner, "AuthPreferences")?,
-                &GUID::zeroed(),
-                0x0409,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &mut create_empty_dispparams(),
-                Some(&mut auth_prefs_result),
-                None,
-                None,
-            )?;
-
-            if auth_prefs_result.Anonymous.Anonymous.vt == VT_DISPATCH {
-                let auth_prefs: IDispatch = (*auth_prefs_result.Anonymous.Anonymous.Anonymous.pdispVal).clone();
-                
-                // Set enterprise flag (0x8)
-                let auth_flags = create_variant_i4(0x8);
-                let mut params = create_dispparams(&[auth_flags]);
-                
-                let _ = auth_prefs.Invoke(
-                    Self::get_method_id(&auth_prefs, "PutAuthFlags")?,
-                    &GUID::zeroed(),
-                    0x0409,  // LOCALE_SYSTEM_DEFAULT
-                    DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                    &mut params,
-                    None,
-                    None,
-                    None,
-                )?;
+    pub fn open_connection(&self, _app_id: &str, app_name: &str) -> Result<(), anyhow::Error> {
+        log::info!("open_connection: self address = {:p}, COM inner = {:p}", self, self.inner);
+        // Always pass empty string for AppID to avoid accidental registration
+        let app_id_var = SafeVariant::from_string("");
+        let app_name_var = SafeVariant::from_string(app_name);
+        // we call the parameters in the reverse order from the IDL because it works
+        match self.invoke_method("OpenConnection", &[app_name_var, app_id_var]) {
+            Ok(_) => {
+                log::info!("✅ OpenConnection successful (signature: AppID, AppName)");
+                Ok(())
+            },
+            Err(e) => {
+                log::error!("OpenConnection failed: {:#}", e);
+                for cause in e.chain().skip(1) {
+                    log::error!("Caused by: {:#}", cause);
+                }
+                Err(anyhow::anyhow!("Failed to open QuickBooks connection. See error logs above for HRESULT, EXCEPINFO, and details."))
             }
         }
-        let app_id_var = create_bstr_variant(app_id);
-        let app_name_var = create_bstr_variant(app_name);
-        let args = [app_id_var, app_name_var];
+    }
 
-        let mut params = create_dispparams(&args);
-        let mut result = VARIANT::default();
-        let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
-        
-        unsafe {
-            self.inner.Invoke(
-                self.open_connection_id,
-                &GUID::zeroed(),
-                0x0409,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err)
+    pub fn begin_session(&self, company_file: &str, file_mode: FileMode) -> Result<*mut IDispatch, anyhow::Error> {
+        log::info!("begin_session: self address = {:p}, COM inner = {:p}", self, self.inner);
+        log::info!("Attempting to begin QuickBooks session...");
+        let file_var = SafeVariant::from_string(company_file);
+        let mode_int = match file_mode {
+            FileMode::SingleUser => 1,
+            FileMode::MultiUser => 2,
+            FileMode::DoNotCare => 2, // per IDL: omDontCare = 2
+            FileMode::Online => 3,
+        };
+        let mode_var = SafeVariant::from_i32(mode_int);
+        // Correct COM parameter order: [mode_var, file_var]
+        // DO NOT REVERSE THE ORDER
+        let result = self.invoke_method("BeginSession", &[mode_var, file_var])?;
+        // Log the VARIANT type and pointer before attempting as_dispatch
+        let vt = unsafe { result.as_variant().n1.n2().vt };
+        let dispatch_ptr = if vt == winapi::shared::wtypes::VT_DISPATCH as u16 {
+            unsafe { *result.as_variant().n1.n2().n3.pdispVal() }
+        } else {
+            std::ptr::null_mut()
+        };
+        log::info!("BeginSession returned VARIANT vt={} (expected {}), dispatch_ptr={:p}", vt, winapi::shared::wtypes::VT_DISPATCH, dispatch_ptr);
+        // Per IDL: returns ISession** (VT_DISPATCH)
+        let session_dispatch = result.as_dispatch()?;
+        log::info!("✅ BeginSession successful, got session IDispatch pointer: {:p}", session_dispatch);
+        // --- Extra validation: try calling a harmless method on the session object ---
+        // We'll attempt to call 'EndSession' (should succeed if session is valid)
+        // If this fails, log a warning but do not return error here
+        if session_dispatch.is_null() {
+            log::warn!("BeginSession returned a null session pointer!");
+        } else {
+            // Try a harmless method call to validate the session object
+            let test_result = self.invoke_method_on_dispatch(session_dispatch, "get_Class", &[]);
+            match test_result {
+                Ok(val) => log::info!("Session object responded to get_Class: {}", val.to_string().unwrap_or_else(|| "<non-string>".to_string())),
+                Err(e) => log::warn!("Session object did not respond to get_Class: {:#}", e),
+            }
+        }
+        Ok(session_dispatch)
+    }
+
+    pub fn end_session(&self) -> Result<(), anyhow::Error> {
+        log::info!("end_session: self address = {:p}, COM inner = {:p}", self, self.inner);
+        self.invoke_method("EndSession", &[])?;
+        Ok(())
+    }
+
+    pub fn close_connection(&self) -> Result<(), anyhow::Error> {
+        log::info!("close_connection: self address = {:p}, COM inner = {:p}", self, self.inner);
+        self.invoke_method("CloseConnection", &[])?;
+        Ok(())
+    }
+
+    pub fn process_request(&self, ticket: &str, request: &str) -> Result<String, anyhow::Error> {
+        log::info!("process_request: self address = {:p}, COM inner = {:p}", self, self.inner);
+        let ticket_var = SafeVariant::from_string(ticket);
+        let request_var = SafeVariant::from_string(request);
+        let result = self.invoke_method("DoRequests", &[ticket_var, request_var])?;
+        Ok(result.to_string().unwrap_or_default())
+    }
+
+    pub fn get_current_company_file_name(&self) -> Result<String, anyhow::Error> {
+        log::info!("get_current_company_file_name: self address = {:p}, COM inner = {:p}", self, self.inner);
+        let result = self.invoke_method("GetCurrentCompanyFileName", &[])?;
+        Ok(result.to_string().unwrap_or_default())
+    }
+
+    pub fn query_account_by_number(&self, session: *mut IDispatch, account_number: &str) -> Result<Option<AccountInfo>, anyhow::Error> {
+        log::info!("query_account_by_number: self address = {:p}, COM inner = {:p}", self, self.inner);
+        log::info!("Querying account by number using QBFC API: {}", account_number);
+        // Step 1: Create AccountQuery object using QBFC API
+        let query_result = self.invoke_method("CreateAccountQuery", &[SafeVariant::from_string(account_number)])?;
+        let query_dispatch = query_result.to_dispatch().ok_or_else(|| anyhow::anyhow!("CreateAccountQuery did not return a dispatch pointer"))?;
+        let query_var = SafeVariant::from_dispatch(Some(query_dispatch));
+        let response_result = self.invoke_method("GetAccountResponse", &[query_var])?;
+        let response_dispatch = response_result.to_dispatch().ok_or_else(|| anyhow::anyhow!("GetAccountResponse did not return a dispatch pointer"))?;
+        log::debug!("✅ Created AccountQuery object");
+        // Step 2: Set account number filter on the query
+        let account_number_var = SafeVariant::from_string(account_number);
+        self.invoke_method_on_dispatch(query_dispatch, "put_AccountNumber", &[account_number_var])?;
+        log::debug!("✅ Set account number filter: {}", account_number);
+        // Step 3: Execute the query
+        let query_var = SafeVariant::from_dispatch(Some(query_dispatch));
+        let response_result = self.invoke_method("GetAccountResponse", &[query_var])?;
+        let response_dispatch = response_result.to_dispatch().ok_or_else(|| anyhow::anyhow!("GetAccountResponse did not return a dispatch pointer"))?;
+        log::debug!("✅ Executed account query");
+        // Step 4: Parse the response to extract account information
+        self.parse_account_response(response_dispatch)
+    }
+
+    /// Helper method to invoke methods on IDispatch objects
+    fn invoke_method_on_dispatch(&self, dispatch: *mut IDispatch, method_name: &str, params: &[SafeVariant]) -> Result<SafeVariant, anyhow::Error> {
+        let mut dispid = 0i32;
+        let method_name_wide = widestring::U16CString::from_str(method_name).unwrap();
+        let names = [method_name_wide.as_ptr()];
+        let hr = unsafe {
+            ((*(*dispatch).lpVtbl).GetIDsOfNames)(
+                dispatch,
+                &IID_NULL,
+                names.as_ptr() as *mut _,
+                1,
+                0,
+                &mut dispid
             )
+        };
+        if hr < 0 {
+            return Err(anyhow::anyhow!("GetIDsOfNames on dispatch failed: HRESULT=0x{:08X}", hr));
         }
-    }
-
-pub fn begin_session(&self, company_file: &str, file_mode: FileMode) -> windows::core::Result<String> {
-        let file_var = create_bstr_variant(company_file);
-        let mode_var = create_bstr_variant(match file_mode {
-            FileMode::SingleUser => "qbFileOpenSingleUser",
-            FileMode::MultiUser => "qbFileOpenMultiUser",
-            FileMode::DoNotCare => "qbFileOpenDoNotCare",
-        });
-        let args = [file_var, mode_var];
-
-        let mut params = create_dispparams(&args);
-        let mut result = VARIANT::default();
-        let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
-
-        unsafe {
-            self.inner.Invoke(
-                self.begin_session_id,
-                &GUID::zeroed(),
-                0x0409,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err)
-            )?;
-            
-            variant_to_string(&result)
-        }
-    }
-
-pub fn end_session(&self, ticket: &str) -> windows::core::Result<()> {
-        let ticket_var = create_bstr_variant(ticket);
-        let args = [ticket_var];
-        let mut params = create_dispparams(&args);
-        let mut result = VARIANT::default();
-        let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
-
-        unsafe {
-            self.inner.Invoke(
-                self.end_session_id,
-                &GUID::zeroed(),
-                0x0409,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err)
+        let mut dispparams = crate::safe_variant::create_dispparams_safe(params);
+        let mut result: VARIANT = unsafe { std::mem::zeroed() };
+        let mut excepinfo: EXCEPINFO = unsafe { std::mem::zeroed() };
+        let hr = unsafe {
+            ((*(*dispatch).lpVtbl).Invoke)(
+                dispatch,
+                dispid,
+                &IID_NULL,
+                0,
+                DISPATCH_METHOD,
+                &mut dispparams,
+                &mut result,
+                &mut excepinfo,
+                std::ptr::null_mut()
             )
+        };
+        if hr < 0 {
+            return Err(anyhow::anyhow!("Invoke on dispatch failed: HRESULT=0x{:08X}", hr));
+        }
+        Ok(SafeVariant::from_winvariant(&result))
+    }
+    
+    /// Parse account information from QBFC response
+    fn parse_account_response(&self, response_dispatch: *mut IDispatch) -> Result<Option<AccountInfo>, anyhow::Error> {
+        log::info!("Parsing QBFC account response...");
+        // Get response list (accounts)
+        let response_list_result = self.invoke_method_on_dispatch(response_dispatch, "get_ResponseList", &[])?;
+        let response_list = response_list_result.to_dispatch().ok_or_else(|| anyhow::anyhow!("get_ResponseList did not return a dispatch pointer"))?;
+        // Get count of accounts returned
+        let count_result = self.invoke_method_on_dispatch(response_list, "get_Count", &[])?;
+        let count = count_result.to_i32().unwrap_or(0);
+        log::debug!("Found {} account(s) in response", count);
+        if count == 0 {
+            log::warn!("No accounts found with the specified criteria");
+            return Ok(None);
+        }
+        // Get first account (should be only one since we filtered by account number)
+        let index_var = SafeVariant::from_i32(0); // 0-based index
+        let account_result = self.invoke_method_on_dispatch(response_list, "GetAt", &[index_var])?;
+        let account_dispatch = account_result.to_dispatch().ok_or_else(|| anyhow::anyhow!("GetAt did not return a dispatch pointer"))?;
+        // Extract account details using QBFC API
+        let name_result = self.invoke_method_on_dispatch(account_dispatch, "get_Name", &[])?;
+        let name = name_result.to_string().unwrap_or_else(|| "Unknown".to_string());
+        let number_result = self.invoke_method_on_dispatch(account_dispatch, "get_AccountNumber", &[])?;
+        let number = number_result.to_string().unwrap_or_else(|| "Unknown".to_string());
+        let type_result = self.invoke_method_on_dispatch(account_dispatch, "get_AccountType", &[])?;
+        let account_type_enum = type_result.to_i32().unwrap_or(0);
+        let account_type = self.qbfc_account_type_to_string(account_type_enum);
+        let balance_result = self.invoke_method_on_dispatch(account_dispatch, "get_Balance", &[])?;
+        let balance = balance_result.to_f64().unwrap_or(0.0);
+        log::info!("✅ Successfully extracted account: {} ({}), Type: {}, Balance: \\${:.2}", name, number, account_type, balance);
+        Ok(Some(AccountInfo {
+            name,
+            number,
+            account_type,
+            balance,
+        }))
+    }
+    
+    /// Convert QBFC account type enum to string
+    fn qbfc_account_type_to_string(&self, account_type: i32) -> String {
+        match account_type {
+            0 => "AccountsPayable".to_string(),
+            1 => "AccountsReceivable".to_string(),
+            2 => "Bank".to_string(),
+            3 => "CostOfGoodsSold".to_string(),
+            4 => "CreditCard".to_string(),
+            5 => "Equity".to_string(),
+            6 => "Expense".to_string(),
+            7 => "FixedAsset".to_string(),
+            8 => "Income".to_string(),
+            9 => "LongTermLiability".to_string(),
+            10 => "OtherAsset".to_string(),
+            11 => "OtherCurrentAsset".to_string(),
+            12 => "OtherCurrentLiability".to_string(),
+            13 => "OtherExpense".to_string(),
+            14 => "OtherIncome".to_string(),
+            _ => format!("Unknown({})", account_type),
         }
     }
 
-pub fn close_connection(&self) -> windows::core::Result<()> {
-        let mut params = create_empty_dispparams();
-        let mut result = VARIANT::default();
-        let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
-        
-        unsafe {
-            self.inner.Invoke(
-                self.close_connection_id,
-                &GUID::zeroed(),
-                0x0409,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err)
-            )
-        }
-    }
-
-pub fn process_request(&self, ticket: &str, request: &str) -> windows::core::Result<String> {
-        let ticket_var = create_bstr_variant(ticket);
-        let request_var = create_bstr_variant(request);
-        let args = [ticket_var, request_var];
-        let mut params = create_dispparams(&args);
-        let mut result = VARIANT::default();
-        let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
-
-        unsafe {
-            self.inner.Invoke(
-                self.process_request_id,
-                &GUID::zeroed(),
-                0x0409,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err)
-            )?;
-            
-            variant_to_string(&result)
-        }
-    }
-
-pub fn get_current_company_file_name(&self, ticket: &str) -> windows::core::Result<String> {
-        let ticket_var = create_bstr_variant(ticket);
-        let args = [ticket_var];
-        let mut params = create_dispparams(&args);
-        let mut result = VARIANT::default();
-        let mut exc_info = EXCEPINFO::default();
-        let mut arg_err = 0u32;
-
-        unsafe {
-            self.inner.Invoke(
-                3,  // DISPID for GetCurrentCompanyFileName
-                &GUID::zeroed(),
-                0x0409,  // LOCALE_SYSTEM_DEFAULT
-                DISPATCH_FLAGS(DISPATCH_METHOD.0 as u16),
-                &mut params,
-                Some(&mut result),
-                Some(&mut exc_info),
-                Some(&mut arg_err)
-            )?;
-            
-            variant_to_string(&result)
-        }
-    }
 }
 
 impl Drop for RequestProcessor2 {
     fn drop(&mut self) {
-        // The IDispatch will be automatically dropped, which releases the COM object
+        log::warn!("RequestProcessor2::drop called! self address = {:p}", self);
+        // Attempt to close any open QuickBooks session and connection on drop
+        // This is best-effort: log errors but do not panic
+        log::info!("RequestProcessor2::drop: Attempting to clean up QuickBooks connection...");
+        // Try to call CloseConnection (safe even if not open)
+        let _ = self.invoke_method("CloseConnection", &[]).map_err(|e| {
+            log::warn!("Drop: CloseConnection failed: {:#}", e);
+        });
     }
 }

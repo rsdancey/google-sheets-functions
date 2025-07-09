@@ -1,138 +1,65 @@
-use anyhow::{Result, Context};
-use log::info;
-use serde::Deserialize;
-use std::env;
+use anyhow::Result;
+use quickbooks_sheets_sync::{config::Config, high_level_client::SyncService};
+use winapi::um::combaseapi::CoInitializeEx;
+use winapi::um::objbase::COINIT_APARTMENTTHREADED;
+use winapi::um::combaseapi::CoUninitialize;
 
-use quickbooks_sheets_sync::{QuickBooksClient, QuickBooksConfig};
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    quickbooks: QuickBooksConfig,
-}
-
-
-#[derive(Debug, Clone)]
-pub struct AccountData {
-    pub name: String,
-    pub account_number: String,
-    pub account_type: String,
-    pub balance: f64,
-    pub description: Option<String>,
-}
-
-impl Config {
-    fn load() -> Result<Self> {
-        let config_path = "config.json";
-        let config_str = std::fs::read_to_string(config_path)
-            .map_err(|e| anyhow::anyhow!(
-                "Failed to read config file '{}': {}. \
-                Make sure the file exists and you have permission to read it.",
-                config_path, e
-            ))?;
-
-        serde_json::from_str(&config_str)
-            .map_err(|e| anyhow::anyhow!(
-                "Failed to parse config file '{}': {}. \
-                Check that the file contains valid JSON in the expected format.",
-                config_path, e
-            ))
-    }
-}
-
-fn print_instructions() {
-    println!("QuickBooks Desktop Integration Service v1.10");
-    println!("==========================================");
-    println!();
-    println!("Prerequisites before running this service:");
-    println!("   1. QuickBooks Desktop must be installed");
-    println!("   2. QuickBooks Desktop must be RUNNING");
-    println!("   3. A company file must be OPEN in QuickBooks");
-    println!("   4. QuickBooks should be in a ready state (not processing anything)");
-    println!();
-    println!("If you see 'Session manager functionality test failed', please:");
-    println!("   • Open QuickBooks Desktop");
-    println!("   • Open a company file");
-    println!("   • Wait for QuickBooks to finish loading completely");
-    println!("   • Then run this service again");
-    println!();
-    println!("Starting QuickBooks integration test...");
-    println!("========================================");
-}
-
-fn print_help() {
-    println!("QuickBooks Sheets Sync - Enhanced Registration and XML Processing Test");
-    println!();
-    println!("This program tests QuickBooks Desktop integration, registration, and XML processing.");
-    println!();
-    println!("USAGE:");
-    println!("    cargo run [OPTIONS]");
-    println!();
-    println!("OPTIONS:");
-    println!("    --verbose, -v    Enable verbose logging");
-    println!("    --help, -h       Show this help message");
-    println!();
-    println!("PREREQUISITES:");
-    println!("    1. QuickBooks Desktop Enterprise must be installed and running");
-    println!("    2. A company file must be open in QuickBooks");
-    println!("    3. QuickBooks should be in single-user mode (not multi-user)");
-    println!("    4. This program may need to run as Administrator");
-    println!("    5. Make sure no other QuickBooks integrations are running");
-    println!();
-    println!("WHAT THIS DOES:");
-    println!("    1. Tests if QuickBooks SDK components are available");
-    println!("    2. Attempts to register the application with QuickBooks");
-    println!("    3. Tests XML processing with account data retrieval");
-    println!("    4. Shows success/failure and next steps");
-    println!();
-    println!("BASED ON:");
-    println!("    Official Intuit SDK sample patterns (SDKTestPlus3.vb)");
-}
+#[cfg(feature = "qbxml")]
+mod qbxml_safe;
+#[cfg(feature = "qbxml")]
+mod qbxml_request_processor;
 
 fn main() -> Result<()> {
-    // Enable error backtrace if requested
-    if env::var("RUST_BACKTRACE").is_err() {
-        env::set_var("RUST_BACKTRACE", "1");
-    }
-    // Initialize logging
-    let args: Vec<String> = env::args().collect();
-    let verbose = args.contains(&"--verbose".to_string()) || args.contains(&"-v".to_string());
-
-    if verbose {
-        env_logger::builder()
-            .filter_level(log::LevelFilter::Debug)
-            .init();
-    } else {
-        env_logger::init();
+    // Initialize COM in STA mode for QuickBooks compatibility
+    unsafe {
+        let hr = CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED);
+        if hr < 0 {
+            panic!("CoInitializeEx failed: HRESULT=0x{:08X}", hr);
+        }
     }
 
-    // Show help if requested
-    if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        print_help();
+    #[cfg(feature = "qbxml")]
+    {
+        println!("Running in QBXML mode!");
+        use qbxml_request_processor::QbxmlClient;
+        let app_id = "";
+        let app_name = "Rust QBXML Test";
+        let company_file = "C:\\Path\\To\\Company.qbw";
+        let mode = 1; // 1 = single user
+        let request_xml = "<QBXML><QBXMLMsgsRq onError='stopOnError'><CompanyQueryRq/></QBXMLMsgsRq></QBXML>";
+        match QbxmlClient::new(app_id, app_name, company_file, mode) {
+            Ok(mut client) => {
+                match client.process_request(request_xml) {
+                    Ok(response) => println!("QBXML response: {}", response),
+                    Err(e) => eprintln!("QBXML request error: {:#}", e),
+                }
+                let _ = client.end_session();
+                let _ = client.close_connection();
+            }
+            Err(e) => eprintln!("QBXML init error: {:#}", e),
+        }
+        unsafe { CoUninitialize(); }
         return Ok(());
     }
 
-    print_instructions();
-
+    println!("QuickBooks Account Sync Service - High-Level API Demo");
+    println!("====================================================");
+    println!();
+    
     // Load configuration
-    let config = Config::load()
-        .context("Failed to load configuration")?;
-
-    // Create QuickBooks client
-    let mut qb = QuickBooksClient::new(&config.quickbooks)?;
-
-    // First, connect to QuickBooks
-    info!("Attempting to connect to QuickBooks...");
-    qb.connect()?;
-    info!("Successfully connected to QuickBooks");
-
-    // Then, begin session
-    info!("Starting QuickBooks session...");
-    qb.begin_session("")?;  // Empty string means use currently open company file
-    info!("Successfully started QuickBooks session");
-
-    // Get company file
-    let company_file = qb.get_company_file_name()?;
-    info!("Current company file: {}", company_file);
-
+    let config = Config::load()?;
+    println!("✅ Configuration loaded from config.toml");
+    
+    // Create high-level sync service
+    let sync_service = SyncService::new(config);
+    
+    // Perform the sync operation using clean, high-level API
+    let result = sync_service.sync_account_to_sheets();
+    
+    // Uninitialize COM before exit
+    unsafe { CoUninitialize(); }
+    
+    result?;
+    
     Ok(())
 }

@@ -93,6 +93,47 @@ impl Config {
         Ok(config)
     }
 
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let config_path = path.as_ref();
+        if !config_path.exists() {
+            return Err(anyhow::anyhow!(
+                "Configuration file not found at: {}. Please create it from config.example.toml",
+                config_path.display()
+            ));
+        }
+
+        // Use Figment to load configuration from specific file
+        let mut config: Config = Figment::new()
+            .merge(Toml::file(config_path))
+            .extract()
+            .context("Failed to parse configuration")?;
+
+        // Override with environment variables if present
+        if let Ok(password) = std::env::var("QB_FILE_PASSWORD") {
+            config.quickbooks.company_file_password = Some(password);
+        }
+        
+        if let Ok(username) = std::env::var("QB_USERNAME") {
+            config.quickbooks.qb_username = Some(username);
+        }
+        
+        if let Ok(password) = std::env::var("QB_USER_PASSWORD") {
+            config.quickbooks.qb_password = Some(password);
+        }
+        
+        if let Ok(api_key) = std::env::var("SHEETS_API_KEY") {
+            config.google_sheets.api_key = api_key;
+        }
+
+        // Post-process Windows paths
+        config.normalize_paths();
+
+        // Validate configuration
+        config.validate()?;
+
+        Ok(config)
+    }
+
     fn validate(&self) -> Result<()> {
         // Validate QuickBooks config
         if self.quickbooks.company_file.is_empty() {

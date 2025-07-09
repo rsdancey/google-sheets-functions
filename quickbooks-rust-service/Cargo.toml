@@ -7,21 +7,18 @@ edition = "2021"
 name = "qb_sync"
 path = "src/main.rs"
 
+[[bin]]
+name = "qb_account_query"
+path = "src/main_account_query.rs"
+
 [dependencies]
 anyhow = "1.0"
 env_logger = "0.11"
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+figment = { version = "0.10", features = ["toml"] }
+winapi = { version = "0.3", features = ["oleauto", "wtypes", "oaidl", "combaseapi", "winerror", "objbase"] }
+widestring = "1.0"
 
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.52", features = [
-    "Win32_Foundation",
-    "Win32_System_Com",
-    "Win32_System_Ole",
-    "Win32_System_Variant",
-    "Win32_UI_WindowsAndMessaging",
-    "Win32_System_Registry",
-    "implement",
-    "Win32_System_Rpc"
-]}
+[features]
+qbxml = []
