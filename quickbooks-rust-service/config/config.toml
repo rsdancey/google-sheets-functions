@@ -7,7 +7,7 @@
 #   2. Use currently open file: "AUTO"
 #   3. Empty string: Will prompt to select from available files
 #   4. Mock data for testing: "MOCK"
-company_file = "AUTO"
+company_file = "F:\\QB File\\alderac entertainment group.qbw"
 
 # Application name registered with QuickBooks (must match exactly)
 # This is the name you used when you first registered your application with QuickBooks
