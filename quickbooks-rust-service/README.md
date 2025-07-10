@@ -1,1 +1,0 @@
-# QuickBooks Rust Service

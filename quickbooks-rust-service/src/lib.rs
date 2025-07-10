@@ -3,5 +3,4 @@
 
 pub mod file_mode;
 pub mod config;
-pub mod qbfc_safe;
 pub mod qbxml_safe;

@@ -1,0 +1,13 @@
+# Google Sheets Sync Configuration
+
+[google_sheets]
+# Google Apps Script Web App URL
+webapp_url = "https://script.google.com/macros/s/AKfycbz1yVgVctgWOfyLAr95vXjXYSXjFtGl6OVqU_ljKUgPJakGoZ5tWnSvlc9XLq6tTddp1w/exec"
+# API key for authentication
+api_key = "30999370-950f-4a87-b2fb-54670dffdf5f"
+# SPREADSHEET ID (the document itself)
+spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
+# SHEET NAME (the tab within the document)
+sheet_name = "The Simple Buckets"
+# CELL ADDRESS (where to write the balance)
+cell_address = "D5"

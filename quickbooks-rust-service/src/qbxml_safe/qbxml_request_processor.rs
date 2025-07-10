@@ -24,6 +24,14 @@ pub const IID_IDispatch: winapi::shared::guiddef::GUID = winapi::shared::guiddef
     Data4: [0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46],
 };
 
+/* #[derive(Debug, Clone)]
+pub struct AccountInfo {
+    pub account_full_name: String,
+    pub number: String,
+    pub account_type: String,
+    pub balance: f64,
+} */
+
 impl QbxmlRequestProcessor {
     pub fn new() -> Result<Self, anyhow::Error> {
         // Use the single QBXML ProgID for RequestProcessor
@@ -85,14 +93,6 @@ impl QbxmlRequestProcessor {
         }
     }
 
-    pub fn open_connection2(&self, app_id: &str, app_name: &str, _conn_type: i32) -> Result<(), anyhow::Error> {
-        let app_id_var = SafeVariant::from_string(app_id);
-        let app_name_var = SafeVariant::from_string(app_name);
-        // Call OpenConnection with the parameters intentionally reversed which mirrors the code path in qbfc_request_processor.rs
-        self.invoke_method("OpenConnection", &[app_name_var, app_id_var])?;
-        Ok(())
-    }
-
     pub fn begin_session(&self, company_file: &str, file_mode: FileMode) -> Result<String, anyhow::Error> {
         log::info!("begin_session: self address = {:p}, COM inner = {:p}", self, self.inner);
         log::info!("Attempting to begin QuickBooks session...");
@@ -118,7 +118,9 @@ impl QbxmlRequestProcessor {
     pub fn process_request(&self, ticket: &str, request: &str) -> Result<String, anyhow::Error> {
         let ticket_var = SafeVariant::from_string(ticket);
         let request_var = SafeVariant::from_string(request);
-        let result = self.invoke_method("ProcessRequest", &[ticket_var, request_var])?;
+        // ProcessRequest with parameters in the reverse order works!
+        let result = self.invoke_method("ProcessRequest", &[request_var, ticket_var])?;
+
         result.to_string().ok_or_else(|| anyhow::anyhow!("ProcessRequest did not return a string"))
     }
 
@@ -137,51 +139,93 @@ impl QbxmlRequestProcessor {
         Ok(())
     }
 
-    fn invoke_method(&self, method_name: &str, params: &[SafeVariant]) -> Result<SafeVariant, anyhow::Error> {
-        // Log parameter types and values for debugging
-        // Log BSTR details for each parameter before COM call
-        for (i, param) in params.iter().enumerate() {
-            let vt = unsafe { param.as_variant().n1.n2().vt };
-            if vt == winapi::shared::wtypes::VT_BSTR as u16 {
-                let bstr = unsafe { *param.as_variant().n1.n2().n3.bstrVal() };
-                if !bstr.is_null() {
-                    let len = unsafe { winapi::um::oleauto::SysStringLen(bstr) } as usize;
-                    let slice = unsafe { std::slice::from_raw_parts(bstr, len) };
-                    println!("[invoke_method] param[{}] BSTR ptr={:p} len={} utf16={:?}", i, bstr, len, &slice[..std::cmp::min(len, 8)]);
-                } else {
-                    println!("[invoke_method] param[{}] BSTR ptr=NULL", i);
+    // currently not used but we may need it
+    pub fn get_current_company_file_name(&self) -> Result<String, anyhow::Error> {
+        log::info!("get_current_company_file_name: self address = {:p}, COM inner = {:p}", self, self.inner);
+        let result = self.invoke_method("GetCurrentCompanyFileName", &[])?;
+        Ok(result.to_string().unwrap_or_default())
+    }
+
+    pub fn get_account_xml(&self, ticket: &str) -> Result<Option<String>, anyhow::Error> {
+        // Step 1: Build QBXML request for account query
+        // note: use xml version "1.0" and qbxml version "13.0" - changes to those versions generate errors
+        let qbxml_request = format!(
+            r#"<?xml version="1.0" encoding="utf-8"?>
+<?qbxml version="13.0"?>
+<QBXML>
+   <QBXMLMsgsRq onError="continueOnError">
+      <AccountQueryRq>
+	    <IncludeRetElement>FullName</IncludeRetElement>
+        <IncludeRetElement>Balance</IncludeRetElement>
+      </AccountQueryRq>
+   </QBXMLMsgsRq>
+</QBXML>"#);        
+        log::debug!("QBXML AccountQueryRq: {}", qbxml_request);
+        // Step 2: Send request
+        let response_xml = match self.process_request(ticket, &qbxml_request) {
+            Ok(xml) => xml,
+            Err(e) => return Err(e),
+        };
+        Ok(Some(response_xml))
+    }
+
+    pub fn get_account_balance(&self, response_xml: &str, account_full_name: &str) -> Result<Option<f64>, anyhow::Error> {
+        let mut balance = 0.0;
+        let mut found = false;
+        let mut search_start = 0;
+        while let Some(ret_start) = response_xml[search_start..].find("<AccountRet>") {
+            let ret_start = ret_start + search_start;
+            let ret_end = match response_xml[ret_start..].find("</AccountRet>") {
+                Some(e) => ret_start + e + "</AccountRet>".len(),
+                None => break,
+            };
+            let account_block = &response_xml[ret_start..ret_end];
+            if let Some(full_name) = Self::extract_xml_field(account_block, "<FullName>", "</FullName>") {
+                if full_name == account_full_name {
+                    balance = Self::extract_xml_field(account_block, "<Balance>", "</Balance>")
+                        .and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0);
+                    found = true;
+                    break;
                 }
             }
-            println!("[invoke_method] param[{}] vt={}", i, vt);
+            search_start = ret_end;
         }
-        let mut dispid = 0i32;
+        if found {
+            Ok(Some(balance))
+        } else {
+            log::warn!("No accounts found with the specified criteria");
+            Ok(None)
+        }
+    }
+
+    fn invoke_method(&self, method_name: &str, params: &[SafeVariant]) -> Result<SafeVariant, anyhow::Error> {
         let method_name_wide = widestring::U16CString::from_str(method_name).unwrap();
-        let names = [method_name_wide.as_ptr()];
+        // Instead, use VARIANT zeroed and wrap as needed
+        let mut result: VARIANT = unsafe { std::mem::zeroed() };
+        let mut excepinfo: EXCEPINFO = unsafe { std::mem::zeroed() };
         let hr = unsafe {
-            ((*(*self.inner).lpVtbl).GetIDsOfNames)(
+            // Correct COM call signature for Invoke
+            let mut dispid = 0i32;
+            let names = [method_name_wide.as_ptr()];
+            let get_id_hr = ((*(*self.inner).lpVtbl).GetIDsOfNames)(
                 self.inner,
                 &IID_NULL,
                 names.as_ptr() as *mut _,
                 1,
                 0x0409,
                 &mut dispid
-            )
-        };
-        if hr < 0 {
-            return Err(anyhow::anyhow!("GetIDsOfNames failed: HRESULT=0x{:08X}", hr));
-        }
-        // --- FIX: Ensure VARIANTs outlive the COM call ---
-        let mut variants: Vec<winapi::um::oaidl::VARIANT> = params.iter().map(|v| v.to_winvariant()).collect();
-        let mut dispparams = winapi::um::oaidl::DISPPARAMS {
-            rgvarg: if variants.is_empty() { std::ptr::null_mut() } else { variants.as_mut_ptr() },
-            rgdispidNamedArgs: std::ptr::null_mut(),
-            cArgs: variants.len() as u32,
-            cNamedArgs: 0,
-        };
-        let mut result: VARIANT = unsafe { std::mem::zeroed() };
-        let mut excepinfo: EXCEPINFO = unsafe { std::mem::zeroed() };
-        let mut arg_err = 0u32;
-        let hr = unsafe {
+            );
+            if get_id_hr < 0 {
+                return Err(anyhow::anyhow!("GetIDsOfNames failed: HRESULT=0x{:08X}", get_id_hr));
+            }
+            let mut variants: Vec<VARIANT> = params.iter().map(|v| v.0).collect();
+            let mut dispparams = winapi::um::oaidl::DISPPARAMS {
+                rgvarg: if variants.is_empty() { std::ptr::null_mut() } else { variants.as_mut_ptr() },
+                rgdispidNamedArgs: std::ptr::null_mut(),
+                cArgs: variants.len() as u32,
+                cNamedArgs: 0,
+            };
+            let mut arg_err = 0u32;
             ((*(*self.inner).lpVtbl).Invoke)(
                 self.inner,
                 dispid,
@@ -195,39 +239,32 @@ impl QbxmlRequestProcessor {
             )
         };
         if hr < 0 {
-            // Extract EXCEPINFO details for diagnostics
-            let bstr_to_string = |bstr: *mut u16| {
-                if bstr.is_null() { return String::new(); }
-                unsafe {
-                    let len = (0..).take_while(|&i| *bstr.offset(i) != 0).count();
-                    let slice = std::slice::from_raw_parts(bstr, len);
-                    String::from_utf16_lossy(slice)
-                }
-            };
-            let description = bstr_to_string(excepinfo.bstrDescription);
-            let source = bstr_to_string(excepinfo.bstrSource);
-            let helpfile = bstr_to_string(excepinfo.bstrHelpFile);
-            log::error!(
-                "COM Invoke failed: method={method_name}, HRESULT=0x{hr:08X}, arg_err={},\n  EXCEPINFO: code={}, wCode={}, source='{}', description='{}', helpfile='{}', helpctx={}, scode=0x{:08X}",
-                arg_err,
-                excepinfo.wCode,
-                excepinfo.wCode,
-                source,
-                description,
-                helpfile,
-                excepinfo.dwHelpContext,
-                excepinfo.scode as u32
-            );
-            return Err(anyhow::anyhow!(
-                "Invoke failed: method={method}, HRESULT=0x{hr:08X}, description='{description}', source='{source}', helpfile='{helpfile}', scode=0x{scode:08X}",
-                method=method_name,
-                hr=hr,
-                description=description,
-                source=source,
-                helpfile=helpfile,
-                scode=excepinfo.scode as u32
-            ));
+            // Log EXCEPINFO details if available
+            unsafe {
+                let description = if !excepinfo.bstrDescription.is_null() {
+                    let wide = widestring::U16CStr::from_ptr_str(excepinfo.bstrDescription);
+                    wide.to_string_lossy()
+                } else {
+                    "<no description>".to_string()
+                };
+                let source = if !excepinfo.bstrSource.is_null() {
+                    let wide = widestring::U16CStr::from_ptr_str(excepinfo.bstrSource);
+                    wide.to_string_lossy()
+                } else {
+                    "<no source>".to_string()
+                };
+                let scode = excepinfo.scode;
+                log::error!("COM Invoke failed: HRESULT=0x{:08X}, Source: {}, Description: {}, SCODE: 0x{:08X}", hr, source, description, scode);
+            }
+            return Err(anyhow::anyhow!("Invoke failed: HRESULT=0x{:08X}", hr));
         }
-        Ok(SafeVariant::from_winvariant(&result))
+        Ok(SafeVariant(result))
+    }
+
+    // Helper function for minimal XML field extraction
+    fn extract_xml_field(xml: &str, start_tag: &str, end_tag: &str) -> Option<String> {
+        let start = xml.find(start_tag)? + start_tag.len();
+        let end = xml[start..].find(end_tag)? + start;
+        Some(xml[start..end].trim().to_string())
     }
 }

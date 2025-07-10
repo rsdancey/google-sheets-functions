@@ -5,17 +5,16 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub quickbooks: QuickBooksConfig,
+    pub google_sheets: GoogleSheetsConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct QuickBooksConfig {
-    pub enabled: Option<bool>,
-    pub company_file: String,
-    pub connection_mode: Option<String>,
-    pub application_name: Option<String>,
-    pub application_id: Option<String>,
-    pub connection_timeout: Option<u32>,
+pub struct GoogleSheetsConfig {
+    pub webapp_url: String,
+    pub api_key: String,
+    pub spreadsheet_id: String,
+    pub sheet_name: Option<String>,
+    pub cell_address: String,
 }
 
 impl Config {
