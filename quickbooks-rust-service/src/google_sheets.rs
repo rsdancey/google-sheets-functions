@@ -41,8 +41,9 @@ impl GoogleSheetsClient {
             .await
             .context("Failed to send POST to Google Sheets Web App")?;
         if !res.status().is_success() {
+            let status = res.status();
             let text = res.text().await.unwrap_or_default();
-            anyhow::bail!("Google Sheets Web App returned error: {} - {}", res.status(), text);
+            anyhow::bail!("Google Sheets Web App returned error: {} - {}", status, text);
         }
         Ok(())
     }

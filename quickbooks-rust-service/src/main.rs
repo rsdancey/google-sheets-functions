@@ -3,7 +3,7 @@ mod config;
 mod qbxml_safe;
 
 use anyhow::{Result, Context};
-use log::{info, error, warn};
+use log::info;
 use std::env;
 
 use crate::config::Config;
@@ -76,7 +76,7 @@ async fn real_main() -> anyhow::Result<()> {
 
     // Load configuration
     info!("Loading configuration from config/config.toml...");
-    let mut config = Config::load_from_file("config/config.toml")
+    let config = Config::load_from_file("config/config.toml")
         .context("Failed to load configuration file")?;
     info!("Configuration loaded successfully");
     info!("Target account: {}", &account_full_name_arg);
