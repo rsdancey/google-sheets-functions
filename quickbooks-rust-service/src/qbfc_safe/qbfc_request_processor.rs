@@ -1,7 +1,7 @@
 use winapi::shared::guiddef::{CLSID, IID_NULL};
 use winapi::um::oaidl::{IDispatch, VARIANT, EXCEPINFO};
-use crate::safe_variant::SafeVariant;
-use crate::FileMode;
+use crate::qbfc_safe::qbfc_safe_variant::SafeVariant;
+use crate::file_mode::FileMode;
 
 const DISPATCH_METHOD: u16 = 1;
 
@@ -299,7 +299,7 @@ impl RequestProcessor2 {
         if hr < 0 {
             return Err(anyhow::anyhow!("GetIDsOfNames on dispatch failed: HRESULT=0x{:08X}", hr));
         }
-        let mut dispparams = crate::safe_variant::create_dispparams_safe(params);
+        let mut dispparams = crate::qbfc_safe::qbfc_safe_variant::create_dispparams_safe(params);
         let mut result: VARIANT = unsafe { std::mem::zeroed() };
         let mut excepinfo: EXCEPINFO = unsafe { std::mem::zeroed() };
         let hr = unsafe {

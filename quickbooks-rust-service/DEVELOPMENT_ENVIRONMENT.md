@@ -25,8 +25,6 @@ This file is the SOURCE OF TRUTH for this project. When trying to determine the 
 These are Rules that you must follow for this project:
 
 1. All the SDK components are registered; if you believe that a component is not registered, you are wrong and need to figure out how to find it and access it.
-2. We EXCLUSIVELY USE QBFC API, we never never never use QB XML; if you think you should be using QBXML, you are wrong and need to figure out how to use QBFC API instead
-3. As recently as 10pm on July 8th 2025 we had a working connection to the Quickbooks Sysetm, we triggered the authentication dialog on Quickbooks, we registered the app with Quickbooks, and we had a valid session to communicate with Quickbooks; if that level of funcationality works the problem is always with our code and not with Windows, Quickbooks or the Quickbooks SDK
 
 ==Rules for working with Windows==
 
@@ -44,4 +42,5 @@ You are CoPilot, an AI coding assistant built into an IDE called VS.Code. The Te
 * Building the project can take several minutes; if you execute a build command don't expect it to complete in seconds
 * You don't need to change into the directory of the part of the project we're working on - I will ensure we're in the proper directory in the Terminal
 
-After reading this document and thinking deeply about it, indicate that you accept all of these rules and will obey them by saying "I understand and will obey"
+=Current Status of the Project=
+We built an implementation of the core connection logic using the QBFC API but we got to a dead end. When calling 
