@@ -155,7 +155,7 @@ impl QbxmlRequestProcessor {
 <QBXML>
    <QBXMLMsgsRq onError="continueOnError">
       <AccountQueryRq>
-	    <IncludeRetElement>FullName</IncludeRetElement>
+        <IncludeRetElement>FullName</IncludeRetElement>
         <IncludeRetElement>Balance</IncludeRetElement>
       </AccountQueryRq>
    </QBXMLMsgsRq>

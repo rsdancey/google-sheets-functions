@@ -9,6 +9,8 @@ use std::env;
 use crate::config::Config;
 use crate::file_mode::FileMode;
 use crate::qbxml_safe::qbxml_request_processor::QbxmlRequestProcessor;
+mod google_sheets;
+use google_sheets::GoogleSheetsClient;
 
 #[derive(Debug, Clone)]
 pub struct AccountData {
@@ -35,23 +37,20 @@ fn print_instructions() {
 }
 
 
-fn main() {
-    match real_main() {
+#[tokio::main]
+async fn main() {
+    match real_main().await {
         Err(e) => {
             eprintln!("Error: {:#}", e);
             std::process::exit(1);
         },
-        Ok(Some(balance)) => {
-            println!("{:.2}", balance);
+        Ok(()) => {
             std::process::exit(0);
-        },
-        Ok(None) => {
-            std::process::exit(1);
         }
     }
 }
 
-fn real_main() -> anyhow::Result<Option<f64>> {
+async fn real_main() -> anyhow::Result<()> {
     // Parse arguments
     let args: Vec<String> = env::args().collect();
     let verbose = args.iter().any(|a| a == "--verbose" || a == "-v");
@@ -82,11 +81,10 @@ fn real_main() -> anyhow::Result<Option<f64>> {
     info!("Configuration loaded successfully");
     info!("Target account: {}", &account_full_name_arg);
 
-    run_qbxml(config, &account_full_name_arg)
+    run_qbxml(config, &account_full_name_arg).await
 }
 
-
-fn run_qbxml(config: Config, account_full_name: &str) -> Result<Option<f64>> {
+async fn run_qbxml(config: Config, account_full_name: &str) -> Result<()> {
     info!("Connecting to QuickBooks Desktop...");
     unsafe {
         let hr = winapi::um::combaseapi::CoInitializeEx(std::ptr::null_mut(), winapi::um::objbase::COINIT_APARTMENTTHREADED);
@@ -140,9 +138,16 @@ fn run_qbxml(config: Config, account_full_name: &str) -> Result<Option<f64>> {
     processor.close_connection()?;
     unsafe { winapi::um::combaseapi::CoUninitialize(); }
     println!("run_qbxml complete");
-    if balance > 0.0 {
-            Ok(Some(balance))
-        } else {
-            Ok(None)
-        }
+
+    // Send balance to Google Sheets
+    let gs_cfg = &config.google_sheets;
+    let gs_client = GoogleSheetsClient::new(
+        gs_cfg.webapp_url.clone(),
+        gs_cfg.api_key.clone(),
+        gs_cfg.spreadsheet_id.clone(),
+        gs_cfg.sheet_name.clone(),
+        gs_cfg.cell_address.clone(),
+    );
+    gs_client.send_balance(account_full_name, balance).await?;
+    Ok(())
 }
