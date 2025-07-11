@@ -28,9 +28,9 @@ connection_mode = "multi-user"
 
 [google_sheets]
 # Google Apps Script Web App URL
-webapp_url = "https://script.google.com/home/projects/1Xzoi9iquQrT_nJJxb_7y100v5LPzI4w4u2ICLpPoBO7-PzYGsJiMuZHh/exec"
+webapp_url = "https://script.google.com/macros/s/AKfycbztC80vrEJEWviz15r1cC9rTVJfYTVdl6qk1SIAgfW0_Oth8n-BrehYh33xjI9y14rDSg/exec"
 # API key for authentication
-api_key = "7a1f31c9-127d-49ef-9c14-618dc506e48b"
+api_key = "5db8c2c0-8909-4bc7-803e-6b95f21628e9"
 # SPREADSHEET ID (the document itself)
 spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
 # SHEET NAME (the tab within the document)
