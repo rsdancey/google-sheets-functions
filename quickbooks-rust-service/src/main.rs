@@ -109,24 +109,38 @@ async fn run_qbxml(config: Config, account_full_name: &str, sheet_name: Option<&
 
     let company_file = match config.quickbooks.company_file.as_str() { "AUTO" => "", path => path };
     let ticket = processor.begin_session(company_file, crate::FileMode::DoNotCare)?;
-    let mut balance = 0.0;
     info!("Session ticket: '{}', length: {}", ticket, ticket.len());
     info!("Successfully started QuickBooks session");
-    // Query account by FullName using the config value
     info!("[QBXML] requesting full account xml from QuickBooks");
     match processor.get_account_xml(&ticket) {
         Ok(Some(response_xml)) => {
             info!("[QBXML] response_xml contains valid account data");
-            match processor.get_account_balance(&response_xml, account_full_name) {
-                Ok(Some(account_balance)) => {
-                    info!("[QBXML] Account balance is: {:?}", account_balance);
-                    balance = account_balance;
-                },
-                Ok(None) => {
-                    info!("[QBXML] No valid account balance");
-                },
-                Err(e) => {
-                    eprintln!("[QBXML] Error parsing response_xml: {:#}", e);
+            let gs_cfg = &config.google_sheets;
+            let gs_client = GoogleSheetsClient::new(
+                gs_cfg.webapp_url.clone(),
+                gs_cfg.api_key.clone(),
+                String::new(), // will be overridden per block
+                None,
+                String::new(), // will be overridden per block
+            );
+            for sync in &config.sync_blocks {
+                info!("Processing account '{}', sheet '{}', cell '{}'", sync.account_full_name, sync.sheet_name, sync.cell_address);
+                match processor.get_account_balance(&response_xml, &sync.account_full_name) {
+                    Ok(Some(account_balance)) => {
+                        info!("[QBXML] Account '{}' balance is: {:?}", sync.account_full_name, account_balance);
+                        gs_client.send_balance(
+                            &sync.account_full_name,
+                            account_balance,
+                            Some(&sync.sheet_name),
+                            Some(&sync.cell_address),
+                        ).await?;
+                    },
+                    Ok(None) => {
+                        info!("[QBXML] No valid balance for account '{}'.", sync.account_full_name);
+                    },
+                    Err(e) => {
+                        eprintln!("[QBXML] Error parsing balance for '{}': {:#}", sync.account_full_name, e);
+                    }
                 }
             }
         },
@@ -144,15 +158,5 @@ async fn run_qbxml(config: Config, account_full_name: &str, sheet_name: Option<&
     unsafe { winapi::um::combaseapi::CoUninitialize(); }
     println!("run_qbxml complete");
 
-    // Send balance to Google Sheets
-    let gs_cfg = &config.google_sheets;
-    let gs_client = GoogleSheetsClient::new(
-        gs_cfg.webapp_url.clone(),
-        gs_cfg.api_key.clone(),
-        gs_cfg.spreadsheet_id.clone(),
-        gs_cfg.sheet_name.clone(),
-        gs_cfg.cell_address.clone(),
-    );
-    gs_client.send_balance(account_full_name, balance, sheet_name, cell_address).await?;
     Ok(())
 }
