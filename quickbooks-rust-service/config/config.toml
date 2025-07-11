@@ -28,9 +28,9 @@ connection_mode = "multi-user"
 
 [google_sheets]
 # Google Apps Script Web App URL
-webapp_url = "https://script.google.com/macros/s/AKfycbydgy_VH-OVhgXDHVDQSbTRxMn7KzGIkFtKzmgvqkuGBI2xZ6FeM89Fiaq5Ww3-YqoL_g/exec"
+webapp_url = "https://script.google.com/macros/s/AKfycbwHbCe-ACQtlJEFG0szNbxiAktWTavWAp4Fyqu9oBlvtoZ7zVPHO9HB2BjJkMij29OU6g/exec"
 # API key for authentication
-api_key = "1ba4e199-2d7a-49f5-b27f-fee0c1dc6d56"
+api_key = "d20115ed-3d28-4dbd-8b35-361d6792aee8"
 
 
 # This is the Profit Workshop
@@ -63,3 +63,9 @@ spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Profit Share"
 sheet_name = "The Simple Buckets"
 cell_address = "D16"
+
+[[sync_blocks]]
+spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
+account_full_name = "Cash Accounts:BoA Accounts:PRINT RESERVE Vault"
+sheet_name = "The Simple Buckets"
+cell_address = "D18"
