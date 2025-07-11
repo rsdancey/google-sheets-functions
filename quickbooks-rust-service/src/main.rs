@@ -33,6 +33,7 @@ fn print_instructions() {
     println!("   3. The FullName of the account in config.toml must exist in QuickBooks");
     println!();
     println!("Usage: main_account_query [--verbose]");
+    println!("All account sync blocks are now read from config/config.toml; no account_full_name, sheet_name, or cell_address parameter is required.");
     println!();
 }
 
@@ -54,22 +55,6 @@ async fn real_main() -> anyhow::Result<()> {
     // Parse arguments
     let args: Vec<String> = env::args().collect();
     let verbose = args.iter().any(|a| a == "--verbose" || a == "-v");
-    let mut account_full_name_arg: Option<&str> = None;
-    let mut sheet_name_arg: Option<&str> = None;
-    let mut cell_address_arg: Option<&str> = None;
-    for arg in &args {
-        if let Some(val) = arg.strip_prefix("--account_full_name=") {
-            account_full_name_arg = Some(val);
-        } else if let Some(val) = arg.strip_prefix("--sheet_name=") {
-            sheet_name_arg = Some(val);
-        } else if let Some(val) = arg.strip_prefix("--cell_address=") {
-            cell_address_arg = Some(val);
-        }
-    }
-    let account_full_name_arg = match account_full_name_arg {
-        Some(val) if !val.is_empty() => val,
-        _ => return Err(anyhow::anyhow!("Missing required --account_full_name argument")),
-    };
 
     if verbose {
         env_logger::builder().filter_level(log::LevelFilter::Debug).init();
@@ -84,12 +69,11 @@ async fn real_main() -> anyhow::Result<()> {
     let config = Config::load_from_file("config/config.toml")
         .context("Failed to load configuration file")?;
     info!("Configuration loaded successfully");
-    info!("Target account: {}", &account_full_name_arg);
 
-    run_qbxml(config, &account_full_name_arg, sheet_name_arg, cell_address_arg).await
+    run_qbxml(config).await
 }
 
-async fn run_qbxml(config: Config, account_full_name: &str, sheet_name: Option<&str>, cell_address: Option<&str>) -> Result<()> {
+async fn run_qbxml(config: Config) -> Result<()> {
     info!("Connecting to QuickBooks Desktop...");
     unsafe {
         let hr = winapi::um::combaseapi::CoInitializeEx(std::ptr::null_mut(), winapi::um::objbase::COINIT_APARTMENTTHREADED);
