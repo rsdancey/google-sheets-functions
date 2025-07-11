@@ -33,7 +33,7 @@ pub struct GoogleSheetsConfig {
     pub webapp_url: String,
     pub api_key: String,
     pub sheet_name: Option<String>,
-    pub cell_address: String,
+    pub cell_address: Option<String>,
     // spreadsheet_id is now per sync_block, not required here
     // pub spreadsheet_id: Option<String>,
 }
