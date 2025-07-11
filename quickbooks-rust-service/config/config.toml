@@ -32,52 +32,34 @@ webapp_url = "https://script.google.com/macros/s/AKfycbzn3s0BkjLwRyVNQP3Wd44qHsp
 # API key for authentication
 api_key = "bd1eab31-c63e-495d-9469-4fc06b1adb0d"
 
+
 # This is the Profit Workshop
-[[sync_block]]
+[[sync_blocks]]
 spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
-# ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:INCOME TAX"
-# SHEET NAME (the tab within the document)
 sheet_name = "The Simple Buckets"
-# CELL ADDRESS (where to write the balance)
 cell_address = "D5"
 
-# This is the Profit Workshop
-[[sync_block]]
+[[sync_blocks]]
 spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
-# ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Profit"
-# SHEET NAME (the tab within the document)
 sheet_name = "The Simple Buckets"
-# CELL ADDRESS (where to write the balance)
 cell_address = "D14"
 
-# This is the Profit Workshop
-[[sync_block]]
+[[sync_blocks]]
 spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
-# ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Shareholders"
-# SHEET NAME (the tab within the document)
 sheet_name = "The Simple Buckets"
-# CELL ADDRESS (where to write the balance)
 cell_address = "D15"
 
-# This is the Profit Workshop
-[[sync_block]]
+[[sync_blocks]]
 spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
-# ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Safety Reserve"
-# SHEET NAME (the tab within the document)
 sheet_name = "The Simple Buckets"
-# CELL ADDRESS (where to write the balance)
 cell_address = "D17"
 
-# This is the Profit Workshop
-[[sync_block]]
+[[sync_blocks]]
 spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
-# ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Profit Share"
-# SHEET NAME (the tab within the document)
 sheet_name = "The Simple Buckets"
-# CELL ADDRESS (where to write the balance)
 cell_address = "D16"
