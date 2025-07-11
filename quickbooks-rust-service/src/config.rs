@@ -7,7 +7,6 @@ use std::path::Path;
 pub struct Config {
     pub quickbooks: QuickBooksConfig,
     pub google_sheets: GoogleSheetsConfig,
-    #[serde(flatten)]
     pub sync_blocks: Vec<AccountSyncConfig>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
