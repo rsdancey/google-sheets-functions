@@ -32,9 +32,10 @@ pub struct QuickBooksConfig {
 pub struct GoogleSheetsConfig {
     pub webapp_url: String,
     pub api_key: String,
-    pub spreadsheet_id: String,
     pub sheet_name: Option<String>,
     pub cell_address: String,
+    // spreadsheet_id is now per sync_block, not required here
+    // pub spreadsheet_id: Option<String>,
 }
 
 
