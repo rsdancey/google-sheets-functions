@@ -34,9 +34,10 @@ api_key = "bd1eab31-c63e-495d-9469-4fc06b1adb0d"
 # This is the Profit Workshop
 fixed_spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
 
-# SPREADSHEET ID (the document itself)
+
 # This is the Profit Workshop
-[spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"]
+[[sync_block]]
+spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
 # ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:INCOME TAX"
 # SHEET NAME (the tab within the document)
@@ -45,7 +46,8 @@ sheet_name = "The Simple Buckets"
 cell_address = "D5"
 
 # This is the Profit Workshop
-[spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"]
+[[sync_block]]
+spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
 # ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Profit"
 # SHEET NAME (the tab within the document)
@@ -54,7 +56,8 @@ sheet_name = "The Simple Buckets"
 cell_address = "D14"
 
 # This is the Profit Workshop
-[spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"]
+[[sync_block]]
+spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
 # ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Shareholders"
 # SHEET NAME (the tab within the document)
@@ -63,7 +66,8 @@ sheet_name = "The Simple Buckets"
 cell_address = "D15"
 
 # This is the Profit Workshop
-[spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"]
+[[sync_block]]
+spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
 # ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Safety Reserve"
 # SHEET NAME (the tab within the document)
@@ -72,7 +76,8 @@ sheet_name = "The Simple Buckets"
 cell_address = "D17"
 
 # This is the Profit Workshop
-[spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"]
+[[sync_block]]
+spreadsheet_id = "1zwDqSpJ0WvYFDhaG35TkUNfEq3ZOXiAQxODx2_nzSQk"
 # ACCOUNT FULL NAME IN QB
 account_full_name = "Cash Accounts:BoA Accounts:PROFIT Vault:Profit Share"
 # SHEET NAME (the tab within the document)
