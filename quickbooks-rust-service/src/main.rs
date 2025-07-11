@@ -101,6 +101,8 @@ async fn run_qbxml(config: Config) -> Result<()> {
             info!("[QBXML] response_xml contains valid account data");
             let gs_cfg = &config.google_sheets;
             for sync in &config.sync_blocks {
+                info!("SYNC BLOCK: spreadsheet_id='{}', account_full_name='{}', sheet_name='{}', cell_address='{}'",
+                    sync.spreadsheet_id, sync.account_full_name, sync.sheet_name, sync.cell_address);
                 info!("Processing account '{}', sheet '{}', cell '{}'", sync.account_full_name, sync.sheet_name, sync.cell_address);
                 match processor.get_account_balance(&response_xml, &sync.account_full_name) {
                     Ok(Some(account_balance)) => {
