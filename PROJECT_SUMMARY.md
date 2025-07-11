@@ -2,7 +2,7 @@
 
 ## 🎯 **Project Overview**
 
-This project enables automatic synchronization of QuickBooks Desktop Enterprise account balances to Google Sheets. Specifically designed to extract the balance of account **9445 (INCOME TAX)** and update it in a Google Sheets cell every hour.
+This project enables automatic synchronization of QuickBooks Desktop Enterprise account balances to Google Sheets.
 
 ## 🏗️ **Architecture**
 
@@ -12,8 +12,8 @@ QuickBooks Desktop Enterprise → Rust Service → Google Apps Script → Google
 
 ## 📦 **Components**
 
-### 1. **Google Apps Script** (`src/Code.ts`)
-- Receives data from Rust service via HTTP POST
+### 1. **Google Apps Script** (`Google_Sheet_Functions/src/Code.ts`)
+ye- Receives data from Rust service via HTTP POST
 - Updates Google Sheets cells with account balances
 - Handles authentication and error logging
 - Deployed as a Web App to receive external requests
