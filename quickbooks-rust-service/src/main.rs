@@ -57,24 +57,18 @@ async fn real_main() -> anyhow::Result<()> {
     let verbose = args.iter().any(|a| a == "--verbose" || a == "-v");
 
     if verbose {
+        print_instructions();
         env_logger::builder().filter_level(log::LevelFilter::Debug).init();
     } else {
         env_logger::builder().filter_level(log::LevelFilter::Info).init();
     }
-
-    print_instructions();
-
     // Load configuration
-    info!("Loading configuration from config/config.toml...");
     let config = Config::load_from_file("config/config.toml")
         .context("Failed to load configuration file")?;
-    info!("Configuration loaded successfully");
-
     run_qbxml(config).await
 }
 
 async fn run_qbxml(config: Config) -> Result<()> {
-    info!("Connecting to QuickBooks Desktop...");
     unsafe {
         let hr = winapi::um::combaseapi::CoInitializeEx(std::ptr::null_mut(), winapi::um::objbase::COINIT_APARTMENTTHREADED);
         if hr < 0 {
@@ -88,22 +82,15 @@ async fn run_qbxml(config: Config) -> Result<()> {
 
     let app_name = config.quickbooks.application_name.as_deref().unwrap_or("QuickBooks Sheets Sync");
 
-    info!("Opening connection to QuickBooks with app: {}", app_name);
     processor.open_connection(app_id, app_name)?;
 
     let company_file = match config.quickbooks.company_file.as_str() { "AUTO" => "", path => path };
+    info!("[DEBUG] Company file: {}", company_file);
     let ticket = processor.begin_session(company_file, crate::FileMode::DoNotCare)?;
-    info!("Session ticket: '{}', length: {}", ticket, ticket.len());
-    info!("Successfully started QuickBooks session");
-    info!("[QBXML] requesting full account xml from QuickBooks");
     match processor.get_account_xml(&ticket) {
         Ok(Some(response_xml)) => {
-            info!("[QBXML] response_xml contains valid account data");
             let gs_cfg = &config.google_sheets;
             for sync in &config.sync_blocks {
-                info!("SYNC BLOCK: spreadsheet_id='{}', account_full_name='{}', sheet_name='{}', cell_address='{}'",
-                    sync.spreadsheet_id, sync.account_full_name, sync.sheet_name, sync.cell_address);
-                info!("Processing account '{}', sheet '{}', cell '{}'", sync.account_full_name, sync.sheet_name, sync.cell_address);
                 match processor.get_account_balance(&response_xml, &sync.account_full_name) {
                     Ok(Some(account_balance)) => {
                         info!("[QBXML] Account '{}' balance is: {:?}", sync.account_full_name, account_balance);
@@ -138,12 +125,8 @@ async fn run_qbxml(config: Config) -> Result<()> {
             eprintln!("[QBXML] Error querying Quickbooks: {:#}", e);
         }
     }
-    info!("Ending session and terminating ticket: {}", ticket);
     processor.end_session(&ticket)?;
-    info!("Closing connection to QuickBooks");
     processor.close_connection()?;
     unsafe { winapi::um::combaseapi::CoUninitialize(); }
-    println!("run_qbxml complete");
-
     Ok(())
 }

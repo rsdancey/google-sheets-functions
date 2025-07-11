@@ -1,9 +1,6 @@
 // Type-safe wrapper for QBXMLRP2.RequestProcessor COM API
 // Mirrors the structure of request_processor.rs but uses tickets (strings) instead of pointers
 
-
-
-
 use winapi::shared::guiddef::{CLSID, IID_NULL};
 use winapi::um::oaidl::{IDispatch, VARIANT, EXCEPINFO};
 use crate::qbxml_safe::qbxml_safe_variant::SafeVariant;
@@ -60,11 +57,9 @@ impl QbxmlRequestProcessor {
             )
         };
         if hr >= 0 && !dispatch_ptr.is_null() {
-            log::info!("✅ Successfully created QBXML COM instance with ProgID: {}", prog_id);
             let instance = Self {
                 inner: dispatch_ptr,
             };
-            log::info!("RequestProcessor2::new: instance address = {:p}, COM inner = {:p}", &instance, instance.inner);
             Ok(instance)
         } else {
             log::error!("Failed to create COM instance for {}: HRESULT=0x{:08X}", prog_id, hr as u32);
@@ -73,14 +68,12 @@ impl QbxmlRequestProcessor {
     }
 
     pub fn open_connection(&self, _app_id: &str, app_name: &str) -> Result<(), anyhow::Error> {
-        log::info!("open_connection: self address = {:p}, COM inner = {:p}", self, self.inner);
         // Always pass empty string for AppID to avoid accidental registration (QBXML does not use AppID)
         let app_id_var = SafeVariant::from_string("");
         let app_name_var = SafeVariant::from_string(app_name);
         // Parameter order matches QBFC for consistency
         match self.invoke_method("OpenConnection", &[app_name_var, app_id_var]) {
             Ok(_) => {
-                log::info!("✅ OpenConnection successful (signature: AppID, AppName)");
                 Ok(())
             },
             Err(e) => {
@@ -94,8 +87,6 @@ impl QbxmlRequestProcessor {
     }
 
     pub fn begin_session(&self, company_file: &str, file_mode: FileMode) -> Result<String, anyhow::Error> {
-        log::info!("begin_session: self address = {:p}, COM inner = {:p}", self, self.inner);
-        log::info!("Attempting to begin QuickBooks session...");
         let file_var = SafeVariant::from_string(company_file);
         let mode_int = match file_mode {
             FileMode::SingleUser => 1,
@@ -108,7 +99,6 @@ impl QbxmlRequestProcessor {
         let result = self.invoke_method("BeginSession", &[mode_var, file_var])?;
         let vt = unsafe { result.as_variant().n1.n2().vt };
         let ticket = result.to_string().unwrap_or_default();
-        log::info!("BeginSession returned VARIANT vt={} (expected {}), ticket='{}'", vt, winapi::shared::wtypes::VT_BSTR, ticket);
         if ticket.is_empty() {
             log::warn!("BeginSession returned an empty ticket string!");
         }
@@ -125,23 +115,18 @@ impl QbxmlRequestProcessor {
     }
 
     pub fn end_session(&self, ticket: &str) -> Result<(), anyhow::Error> {
-        log::info!("end_session: self address = {:p}, COM inner = {:p}, ticket = '{}'", self, self.inner, ticket);
         let ticket_var = SafeVariant::from_string(ticket);
         self.invoke_method("EndSession", &[ticket_var])?;
-        log::info!("✅ EndSession successful for ticket '{}'", ticket);
         Ok(())
     }
 
     pub fn close_connection(&self) -> Result<(), anyhow::Error> {
-        log::info!("close_connection: self address = {:p}, COM inner = {:p}", self, self.inner);
         self.invoke_method("CloseConnection", &[])?;
-        log::info!("✅ CloseConnection successful");
         Ok(())
     }
 
     // currently not used but we may need it
     pub fn get_current_company_file_name(&self) -> Result<String, anyhow::Error> {
-        log::info!("get_current_company_file_name: self address = {:p}, COM inner = {:p}", self, self.inner);
         let result = self.invoke_method("GetCurrentCompanyFileName", &[])?;
         Ok(result.to_string().unwrap_or_default())
     }
@@ -160,7 +145,6 @@ impl QbxmlRequestProcessor {
       </AccountQueryRq>
    </QBXMLMsgsRq>
 </QBXML>"#);        
-        log::debug!("QBXML AccountQueryRq: {}", qbxml_request);
         // Step 2: Send request
         let response_xml = match self.process_request(ticket, &qbxml_request) {
             Ok(xml) => xml,
