@@ -100,18 +100,19 @@ async fn run_qbxml(config: Config) -> Result<()> {
         Ok(Some(response_xml)) => {
             info!("[QBXML] response_xml contains valid account data");
             let gs_cfg = &config.google_sheets;
-            let gs_client = GoogleSheetsClient::new(
-                gs_cfg.webapp_url.clone(),
-                gs_cfg.api_key.clone(),
-                String::new(), // will be overridden per block
-                None,
-                String::new(), // will be overridden per block
-            );
             for sync in &config.sync_blocks {
                 info!("Processing account '{}', sheet '{}', cell '{}'", sync.account_full_name, sync.sheet_name, sync.cell_address);
                 match processor.get_account_balance(&response_xml, &sync.account_full_name) {
                     Ok(Some(account_balance)) => {
                         info!("[QBXML] Account '{}' balance is: {:?}", sync.account_full_name, account_balance);
+                        // Create a new GoogleSheetsClient for each sync block with correct spreadsheet_id and cell_address
+                        let gs_client = GoogleSheetsClient::new(
+                            gs_cfg.webapp_url.clone(),
+                            gs_cfg.api_key.clone(),
+                            sync.spreadsheet_id.clone(),
+                            Some(sync.sheet_name.clone()),
+                            sync.cell_address.clone(),
+                        );
                         gs_client.send_balance(
                             &sync.account_full_name,
                             account_balance,
