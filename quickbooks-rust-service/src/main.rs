@@ -85,7 +85,7 @@ async fn run_qbxml(config: Config) -> Result<()> {
     processor.open_connection(app_id, app_name)?;
 
     let company_file = match config.quickbooks.company_file.as_str() { "AUTO" => "", path => path };
-    info!("[DEBUG] Company file: {}", company_file);
+    println!("[DEBUG] Company file: {}", company_file);
     let ticket = processor.begin_session(company_file, crate::FileMode::DoNotCare)?;
     match processor.get_account_xml(&ticket) {
         Ok(Some(response_xml)) => {
