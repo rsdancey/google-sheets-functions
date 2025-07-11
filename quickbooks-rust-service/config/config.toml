@@ -28,9 +28,9 @@ connection_mode = "multi-user"
 
 [google_sheets]
 # Google Apps Script Web App URL
-webapp_url = "https://script.google.com/macros/s/AKfycbzQeZv1VDkl5DIqCs0ur98GFN5xKoqgMLiWXOdbs-XiyKb5_Jeab2bxln0l-r7g9Df_6A/exec"
+webapp_url = "https://script.google.com/macros/s/AKfycbydgy_VH-OVhgXDHVDQSbTRxMn7KzGIkFtKzmgvqkuGBI2xZ6FeM89Fiaq5Ww3-YqoL_g/exec"
 # API key for authentication
-api_key = "2d1df1f6-210a-4073-aca8-4e0602c189fa"
+api_key = "1ba4e199-2d7a-49f5-b27f-fee0c1dc6d56"
 
 
 # This is the Profit Workshop
