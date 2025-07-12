@@ -22,34 +22,19 @@
  */
 function UPDATE_QB_ACCOUNT(accountNumber, accountValue, cellAddress, spreadsheetId, sheetName) {
     try {
-        console.log('[UPDATE_QB_ACCOUNT] Called with:', {
-            accountNumber,
-            accountValue,
-            cellAddress,
-            spreadsheetId,
-            sheetName
-        });
         // Use specific spreadsheet if ID provided, otherwise use active spreadsheet
         const spreadsheet = spreadsheetId ?
             SpreadsheetApp.openById(spreadsheetId) :
             SpreadsheetApp.getActiveSpreadsheet();
-        console.log('[UPDATE_QB_ACCOUNT] Using spreadsheet:', spreadsheet.getId());
         const sheet = sheetName ? spreadsheet.getSheetByName(sheetName) : spreadsheet.getActiveSheet();
         if (!sheet) {
             console.error(`[UPDATE_QB_ACCOUNT] Sheet not found: ${sheetName}`);
-            throw new Error(`Sheet "${sheetName}" not found`);
+            throw new Error(`Sheet "${sheetName}" not found. Available sheets: ${allSheets.join(', ')}`);
         }
-        console.log('[UPDATE_QB_ACCOUNT] Using sheet:', sheet.getName());
         // Update the cell with the account value
         const range = sheet.getRange(cellAddress);
-        console.log(`[UPDATE_QB_ACCOUNT] Writing value ${accountValue} to cell ${cellAddress}`);
         range.setValue(accountValue);
-        // Add a timestamp to track when this was last updated
-        const timestampCell = sheet.getRange(cellAddress).offset(0, 1);
-        timestampCell.setValue(new Date());
-        console.log(`[UPDATE_QB_ACCOUNT] Timestamp written to cell ${timestampCell.getA1Notation()}`);
         const msg = `Account ${accountNumber} updated: ${accountValue} at ${new Date().toLocaleString()}`;
-        console.log('[UPDATE_QB_ACCOUNT] Success:', msg);
         return msg;
     }
     catch (error) {
@@ -66,9 +51,7 @@ function UPDATE_QB_ACCOUNT(accountNumber, accountValue, cellAddress, spreadsheet
  */
 function doPost(e) {
     try {
-        console.log('[doPost] Raw event:', JSON.stringify(e));
         const data = JSON.parse(e.postData.contents);
-        console.log('[doPost] Parsed data:', data);
         // Validate required fields
         if (!data.accountNumber || data.accountValue === undefined || !data.cellAddress) {
             console.error('[doPost] Missing required fields:', data);
@@ -80,12 +63,9 @@ function doPost(e) {
             console.error('[doPost] Invalid API key:', data.apiKey);
             throw new Error('Invalid API key');
         }
-        console.log('[doPost] API key validated. Calling UPDATE_QB_ACCOUNT...');
         // Update the QuickBooks account data
         const result = UPDATE_QB_ACCOUNT(data.accountNumber, data.accountValue, data.cellAddress, data.spreadsheetId, // Pass spreadsheet ID if provided
             data.sheetName);
-        // Log the update
-        console.log('[doPost] QuickBooks sync result:', result);
         return ContentService
             .createTextOutput(JSON.stringify({ success: true, message: result }))
             .setMimeType(ContentService.MimeType.JSON);

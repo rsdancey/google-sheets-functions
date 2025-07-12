@@ -28,4 +28,6 @@ Thumbs.db
 *.ps1
 setup-*.ps1
 /target/
-/target/
+
+# Backup files
+*~
